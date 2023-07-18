@@ -35,6 +35,7 @@ clean:
 	rm -rf build
 	rm -rf doth/easing.h 
 	rm -rf doth/filter.h
+	rm -rf doth/audio2h.h
 	rm -rf audio2h/converted 
 	rm -rf audio2h/files.json
 
