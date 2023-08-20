@@ -1,19 +1,19 @@
 # pikocore
 
 
-pikocore is a hackable, open-source, lo-fi music mangler based on the Raspberry Pi Pico. 
+pikocore is a hackable, open-source, lo-fi music mangler based on the Raspberry Pi Pico.
 
 read more here: https://pikocore.com
 
 
 ## usage
 
-### prerequisites 
+### prerequisites
 
 First install Go and then install pre-reqs:
 
 ```
-make preqreqs
+make prereqs
 ```
 
 This will install `clang-format`, `cmake`, the pico toolchain, `gcc`, `python`, and other useful packages.
