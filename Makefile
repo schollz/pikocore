@@ -1,10 +1,16 @@
 build16: pico-sdk changeto16 quick
 
-build2: pico-sdk changeto2 quick 
+build2: pico-sdk changeto2 quick
 
 prereqs: pico-sdk
+ifeq ($(shell uname),Darwin)
+	brew install clang-format cmake gcc minicom sox python3
+	brew install --cask gcc-arm-embedded
+	python3 -m pip install matplotlib numpy icecream
+else
 	sudo apt install -y clang-format cmake gcc-arm-none-eabi gcc g++ minicom sox python3 python3-pip
-	sudo -H python3 -m pip install matplotlib numpy
+	sudo -H python3 -m pip install matplotlib numpy icecream
+endif
 
 doth/easing.h:
 	cd doth && python3 generate_easing.py > easing.h
@@ -21,10 +27,18 @@ quick: doth/easing.h doth/filter.h
 	echo "BUILD SUCCESS"
 
 changeto16:
+ifeq ($(shell uname),Darwin)
+	sed -i '' 's/LENGTH = 2048k/LENGTH = 16384k/g' pico-sdk/src/rp2_common/pico_standard_link/memmap_default.ld
+else
 	sed -i 's/LENGTH = 2048k/LENGTH = 16384k/g' pico-sdk/src/rp2_common/pico_standard_link/memmap_default.ld
+endif
 
 changeto2:
+ifeq ($(shell uname),Darwin)
+	sed -i '' 's/LENGTH = 16384k/LENGTH = 2048k/g' pico-sdk/src/rp2_common/pico_standard_link/memmap_default.ld
+else
 	sed -i 's/LENGTH = 16384k/LENGTH = 2048k/g' pico-sdk/src/rp2_common/pico_standard_link/memmap_default.ld
+endif
 
 audio:
 	cd audio2h && rm -rf converted
@@ -33,10 +47,10 @@ audio:
 
 clean:
 	rm -rf build
-	rm -rf doth/easing.h 
+	rm -rf doth/easing.h
 	rm -rf doth/filter.h
 	rm -rf doth/audio2h.h
-	rm -rf audio2h/converted 
+	rm -rf audio2h/converted
 	rm -rf audio2h/files.json
 
 pico-sdk:
