@@ -40,6 +40,8 @@ If you are using a 2mb pico, then you should do `make build2` (the default is 16
 
 Then upload the `build/pikocore.uf2` to your pico.
 
+If you want to turn off the LED, change `#define WS2812_ENABLED 1` to `#define WS2812_ENABLED 0` in the `main.cpp` file.
+
 ## dev
 
 You can open a minicom terminal by running `make debug` after switching on `DEBUG_X` flags in `main.cpp`.

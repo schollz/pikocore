@@ -13,7 +13,6 @@
 #include "pico/stdlib.h"     // stdlib
 
 // pikocore files
-#include "doth/WS2812.hpp"
 #include "doth/audio2h.h"
 #include "doth/button.h"
 #include "doth/delay.h"
@@ -56,7 +55,11 @@
 // #define DEBUG_SEQUENCER 1
 // #define DEBUG_SAVE 1
 // #define DEBUG_BPM 1
+#define WS2812_ENABLED 1
 
+#if WS2812_ENABLED == 1
+#include "doth/WS2812.hpp"
+#endif
 /*
  * GLOBAL VARIABLES
  */
@@ -95,19 +98,19 @@ bool do_mute = false;
 uint8_t do_mute_debounce = 0;
 
 // sample tracking
-uint8_t sample = 0;
-uint8_t sample_beats = 8;
-uint8_t sample_change = 0;
-uint8_t sample_add = 0;
-uint8_t sample_set = 0;
+uint16_t sample = 0;
+uint16_t sample_beats = 8;
+uint16_t sample_change = 0;
+uint16_t sample_add = 0;
+uint16_t sample_set = 0;
 uint32_t phase_sample[] = {0, 0};
 uint32_t phase_retrig = 0;
 bool phase_head = 0;
 uint32_t phase_xfade = 0;
 
 // beat tracking
-uint8_t select_beat = 0;
-uint8_t select_beat_freeze = 0;
+uint16_t select_beat = 0;
+uint16_t select_beat_freeze = 0;
 bool direction[] = {1, 1};  // 0 = reverse, 1 = forward
 bool base_direction = 1;    // 0 = reverse, 1 == forward
 uint8_t volume_mod = 0;
@@ -794,7 +797,7 @@ int main(void) {
 
   // sleep needed to make sure it can start on battery
   // not sure why
-  sleep_us(1000);
+  sleep_ms(100);
 
   // initialize bpm
   param_set_bpm(BPM_SAMPLED, bpm_set, beat_thresh, audio_clk_thresh);
@@ -897,7 +900,8 @@ int main(void) {
   RunningAverage ra;
   ra.Init(5);
 
-  // LED
+// LED
+#if WS2812_ENABLED == 1
   WS2812 ledStrip(
       23,    // Data line is connected to pin 0. (GP0)
       1,     // Strip is 6 LEDs long.
@@ -908,6 +912,7 @@ int main(void) {
           // https://datasheets.raspberrypi.org/rp2040/rp2040-datasheet.pdf
       WS2812::FORMAT_GRB  // Pixel format used by the LED strip
   );
+#endif
 
   // control loop
   while (1) {
@@ -915,6 +920,7 @@ int main(void) {
     clock_ms++;
     clock_sync_ms++;
 
+#if WS2812_ENABLED == 1
     if (clock_ms % 200 == 0) {
       // leds
       // ledStrip.fill(WS2812::RGB(input_knob[0].Value() * 255 / 4095,
@@ -958,6 +964,7 @@ int main(void) {
       }
       ledStrip.show();
     }
+#endif
 
     if (debounce_sample > 0) {
       debounce_sample--;
