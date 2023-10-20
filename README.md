@@ -3,6 +3,8 @@
 
 pikocore is a hackable, open-source, lo-fi music mangler based on the Raspberry Pi Pico.
 
+![img](https://user-images.githubusercontent.com/6550035/276962341-4c0065e4-f0cf-4315-9de2-e26aa2ebe1e7.jpg)
+
 read more here: https://pikocore.com
 
 
