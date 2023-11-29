@@ -1,0 +1,13 @@
+.program midi_rx
+
+readbyte:
+    wait 0 pin 0    ; wait for idle bit (high)
+    wait 1 pin 0    ; wait for start bit (low)
+    set x, 7 [13]   ; set iterator & wait 1/2 cycle (16 µs)
+bitloop:                
+    nop [29]        ; each loop is 1 cycle (32 us)
+    in pins, 1          
+    jmp x-- bitloop
+    push noblock
+    jmp readbyte
+

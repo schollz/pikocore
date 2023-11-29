@@ -5,7 +5,8 @@
 #include <cmath>
 
 // pico files
-#include "hardware/adc.h"    // adc_read
+#include "hardware/adc.h"  // adc_read
+#include "hardware/clocks.h"
 #include "hardware/flash.h"  // flash memory
 #include "hardware/irq.h"    // interrupts
 #include "hardware/pwm.h"    // pwm
@@ -22,6 +23,7 @@
 #include "doth/knob.h"
 #include "doth/led.h"
 #include "doth/ledarray.h"
+#include "doth/onewiremidi.h"
 #include "doth/runningavg.h"
 #include "doth/sequencer.h"
 #include "doth/trigger_out.h"
@@ -42,20 +44,6 @@
 #define TRIGO_PIN 21  // trigger out pin
 #define MAIN_LOOP_HZ 4
 #define MAIN_LOOP_DELAY 50
-
-/*
- * DEBUGGERS
- * uncomment these lines to add print statements
- */
-// #define DEBUG_PWM 1
-// #define DEBUG_CALIBRATE_PO 1
-// #define DEBUG_CLOCK 1
-// #define DEBURG_KNOB 1
-// #define DEBUG_BUTTONS 1
-// #define DEBUG_SEQUENCER 1
-// #define DEBUG_SAVE 1
-// #define DEBUG_BPM 1
-#define WS2812_ENABLED 1
 
 #if WS2812_ENABLED == 1
 #include "doth/WS2812.hpp"
@@ -161,6 +149,7 @@ bool button_filter_on = false;
 uint8_t retrig_volume_reduce_change = 0;
 bool retrig_pitch_up = false;
 bool retrig_pitch_down = false;
+uint8_t syncing_clicks = 0;
 
 // bpm configuring
 bool flag_half_time = 0;  // specifies quarter note or not
@@ -177,6 +166,13 @@ bool button_trigger[8] = {false, false, false, false,
 
 // sequencer
 Sequencer sequencer;
+
+#if MIDI_IN_ENABLED == 1
+// midi handler
+Onewiremidi *onewiremidi;
+#endif
+int8_t midi_button1 = -1;
+int8_t midi_button2 = -1;
 
 /*
  * HELPER FUNCTIONS
@@ -320,6 +316,7 @@ void pwm_interrupt_handler() {
     // check button 1
     if (button_on < NUM_BUTTONS) {
       if (!input_button[button_on].On()) {
+        // button is off
         button_on = NUM_BUTTONS;
         button_on2 = NUM_BUTTONS;
         select_beat_freeze = 0;
@@ -792,6 +789,150 @@ void print_buf(const uint8_t *buf, size_t len) {
   }
 }
 
+void do_stop_everything() { do_mute = true; }
+void do_start_everything() {
+  // reset syncing
+  is_syncing = false;
+  syncing_clicks = 0;
+  do_mute_debounce = 8;
+  button_on = NUM_BUTTONS;
+  button_on2 = NUM_BUTTONS;
+  btn_reset = true;
+  // reset everything
+  // reset retrig stuff
+  retrig_filter = 0;
+  retrig_pitch_up = false;
+  retrig_pitch_down = false;
+  retrig_pitch_change = 0;
+  retrig_volume_reduce = 0;
+  retrig_volume_reduce_change = 0;
+  button_filter_on = false;
+  fx_retrig = false;
+  btn_retrig = false;
+  do_mute = false;
+}
+
+#if MIDI_IN_ENABLED == 1
+uint32_t current_time() { return to_ms_since_boot(get_absolute_time()); }
+
+uint16_t *sort_int32_t(uint32_t array[], int n) {
+  // C
+  // uint16_t *indexes = malloc(sizeof(uint16_t) * n);
+  // C++
+  uint16_t *indexes = new uint16_t[n];
+  for (int i = 0; i < n; i++) {
+    indexes[i] = i;
+  }
+  // Sort the auxiliary array based on the values in the original array.
+  for (int i = 0; i < n - 1; i++) {
+    for (int j = i + 1; j < n; j++) {
+      if (array[indexes[i]] > array[indexes[j]]) {
+        // Swap the elements at indexes[i] and indexes[j].
+        int temp = indexes[i];
+        indexes[i] = indexes[j];
+        indexes[j] = temp;
+      }
+    }
+  }
+  return indexes;
+}
+
+#define MIDI_MAX_NOTES 128
+#define MIDI_MAX_TIME_ON 10000  // 10 seconds
+
+uint32_t note_hit[MIDI_MAX_NOTES];
+bool note_on[MIDI_MAX_NOTES];
+uint32_t midi_last_time = 0;
+uint32_t midi_delta_sum = 0;
+uint32_t midi_delta_count = 0;
+#define MIDI_DELTA_COUNT_MAX 32
+uint32_t midi_timing_count = 0;
+const uint8_t midi_timing_modulus = 24;
+
+void midi_note_off(uint8_t note) {
+#ifdef DEBUG_MIDI
+  printf("note_off: %d\n", note);
+#endif
+#if MIDI_NOTE_KEY == 1
+  input_button[note % NUM_BUTTONS].Set(false);
+  if (midi_button2 > -1) {
+    midi_button2 = -1;
+  } else {
+    midi_button1 = -1;
+  }
+#endif
+}
+
+void midi_note_on(uint8_t note, uint8_t velocity) {
+#ifdef DEBUG_MIDI
+  printf("note_on: %d\n", note);
+#endif
+#if MIDI_NOTE_KEY == 1
+  if (midi_button1 > -1) {
+    midi_button2 = note % NUM_BUTTONS;
+  } else {
+    midi_button1 = note % NUM_BUTTONS;
+  }
+  input_button[note % NUM_BUTTONS].Set(true);
+#endif
+}
+
+void midi_start() {
+  do_start_everything();
+  soft_sync = false;
+  btn_reset = false;
+  midi_timing_count = 24 * MIDI_RESET_EVERY_BEAT - 1;
+}
+void midi_continue() {
+  do_start_everything();
+  soft_sync = false;
+  btn_reset = false;
+  midi_timing_count = 24 * MIDI_RESET_EVERY_BEAT - 1;
+}
+void midi_stop() {
+  do_stop_everything();
+  soft_sync = false;
+  btn_reset = false;
+  midi_timing_count = 24 * MIDI_RESET_EVERY_BEAT - 1;
+}
+void midi_timing() {
+  midi_timing_count++;
+  if (midi_timing_count % (24 * MIDI_RESET_EVERY_BEAT) == 0) {
+    btn_reset = true;
+#ifdef DEBUG_MIDI
+    printf("midi resetting");
+#endif
+  } else if (midi_timing_count %
+                 (midi_timing_modulus / MIDI_CLOCK_MULTIPLIER) ==
+             0) {
+    soft_sync = true;
+  }
+  uint32_t now_time = time_us_32();
+  if (midi_last_time > 0) {
+    midi_delta_sum += now_time - midi_last_time;
+    midi_delta_count++;
+    if (midi_delta_count == MIDI_DELTA_COUNT_MAX) {
+      uint32_t bpm_input =
+          (int)round(1250000.0 * MIDI_CLOCK_MULTIPLIER * MIDI_DELTA_COUNT_MAX /
+                     (float)(midi_delta_sum));
+#ifdef DEBUG_MIDI
+      printf("midi bpm\t%d\n", bpm_input);
+#endif
+      if (bpm_input - 7 != bpm_set) {
+        // #ifdef DEBUG_CLOCK
+        //         printf("%d, %d\n", clock_sync_ms, bpm_input);
+        // #endif
+        // REDUCE THE BPM INPUT TO ELIMINATE OVERSTEPPING
+        param_set_bpm(bpm_input - 7, bpm_set, beat_thresh, audio_clk_thresh);
+      }
+      midi_delta_count = 0;
+      midi_delta_sum = 0;
+    }
+  }
+  midi_last_time = now_time;
+}
+#endif
+
 int main(void) {
   stdio_init_all();
 
@@ -806,8 +947,8 @@ int main(void) {
   ledarray.Init();
 
   // initialize clocking and PWM interrupts
-  set_sys_clock_khz(CLOCK_RATE,
-                    true);  // overclock at a multiple of sampling rate
+  // overclock at a multiple of sampling rate
+  set_sys_clock_khz(CLOCK_RATE, true);
   gpio_set_function(AUDIO_PIN, GPIO_FUNC_PWM);
   int audio_pin_slice = pwm_gpio_to_slice_num(AUDIO_PIN);
   pwm_clear_irq(audio_pin_slice);
@@ -896,9 +1037,16 @@ int main(void) {
   bool do_load = false;
   bool first_time = false;
   bool has_loaded = false;
-  uint8_t syncing_clicks = 0;
   RunningAverage ra;
   ra.Init(5);
+
+#if MIDI_IN_ENABLED == 1
+
+  // initialize one wire midi
+  onewiremidi =
+      Onewiremidi_new(pio1, 0, CLOCK_PIN, midi_note_on, midi_note_off,
+                      midi_start, midi_continue, midi_stop, midi_timing);
+#endif
 
 // LED
 #if WS2812_ENABLED == 1
@@ -920,6 +1068,9 @@ int main(void) {
     clock_ms++;
     clock_sync_ms++;
 
+#if MIDI_IN_ENABLED == 1
+    Onewiremidi_receive(onewiremidi);
+#endif
 #if WS2812_ENABLED == 1
     if (clock_ms % 200 == 0) {
       // leds
@@ -1052,7 +1203,9 @@ int main(void) {
     if (clock_ms % 16 == 0) {  // 250 Hz
       // read gpio inputs
       for (uint8_t i = 0; i < NUM_BUTTONS; i++) {
-        input_button[i].Read();
+        if (midi_button1 != i && midi_button2 != i) {
+          input_button[i].Read();
+        }
         if (input_button[0].ChangedHigh(true) ||
             input_button[3].ChangedHigh(true) ||
             input_button[4].ChangedHigh(true) ||
@@ -1062,26 +1215,10 @@ int main(void) {
           if (input_button[0].On() && input_button[3].On() &&
               input_button[4].On() && input_button[7].On()) {
             if (do_mute) {
-              // reset syncing
-              is_syncing = false;
-              syncing_clicks = 0;
-              do_mute_debounce = 8;
-              button_on = NUM_BUTTONS;
-              button_on2 = NUM_BUTTONS;
-              btn_reset = true;
-              // reset everything
-              // reset retrig stuff
-              retrig_filter = 0;
-              retrig_pitch_up = false;
-              retrig_pitch_down = false;
-              retrig_pitch_change = 0;
-              retrig_volume_reduce = 0;
-              retrig_volume_reduce_change = 0;
-              button_filter_on = false;
-              fx_retrig = false;
-              btn_retrig = false;
+              do_start_everything();
+            } else {
+              do_stop_everything();
             }
-            do_mute = !do_mute;
             printf("switching do mute: %d\n", do_mute);
           }
         }
@@ -1332,6 +1469,7 @@ int main(void) {
       // adc reading end
     }
 
+#if MIDI_IN_ENABLED == 0
     // trigger in
     uint8_t clock_pin = 1 - gpio_get(CLOCK_PIN);
     // code to verify polarity -KEEP
@@ -1381,6 +1519,7 @@ int main(void) {
       do_sync_play = false;
     }
     clock_pin_last = clock_pin;
+#endif
 
     // trig out
     output_trigger.Update();
