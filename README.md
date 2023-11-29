@@ -42,7 +42,11 @@ If you are using a 2mb pico, then you should do `make build2` (the default is 16
 
 Then upload the `build/pikocore.uf2` to your pico.
 
-If you want to turn off the LED, change `#define WS2812_ENABLED 1` to `#define WS2812_ENABLED 0` in the `main.cpp` file.
+### customization
+
+If you want to turn off the LED, change `WS2812_ENABLED=1` to `WS2812_ENABLED=0` in the `target_compile_definitions.cmake` file.
+
+If you want to use MIDI instead of clock in (requires [itty bitty midi](https://ittybittymidi.com)) then set `MIDI_IN_ENABLED=1` in the `target_compile_definitions.cmake` file.
 
 ## dev
 
