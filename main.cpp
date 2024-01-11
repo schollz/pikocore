@@ -111,12 +111,12 @@ uint8_t hpf_fc = 0;
 uint8_t filter_q = 0;
 uint8_t bitcrush = 0;
 uint8_t stretch_change = 0;
+bool do_lock_clock = false;
 
 // beat tracking (beat = eighth-note)
 uint32_t beat_counter = 0;
 uint16_t bpm_set = 79;
 uint32_t beat_thresh = 21120000;
-uint32_t beat_num = 0;
 uint32_t beat_num_total = 0;
 bool beat_onset = false;
 bool beat_led = 0;
@@ -295,7 +295,6 @@ void pwm_interrupt_handler() {
     }
 #endif
     soft_sync = false;
-    beat_num++;
     beat_num_total++;
     beat_counter = 0;
     beat_onset = true;
@@ -303,7 +302,6 @@ void pwm_interrupt_handler() {
     noise_gate_val = 0;
     if (btn_reset) {
       beat_led = 1;
-      beat_num = 0;
       beat_num_total = 0;
     }
     gpio_put(LED_PIN, beat_led);
@@ -382,7 +380,7 @@ void pwm_interrupt_handler() {
     if (!fx_retrig) {
 #ifdef DEBUG_PWM
       printf("[%d bpm / %d thresh / beat_num: %d] ", bpm_set, beat_thresh,
-             beat_num);
+             beat_num_total);
 #endif
 
       // check for fx
@@ -493,7 +491,11 @@ void pwm_interrupt_handler() {
       sample_beats = raw_beats(sample);
 
       beat_onset = false;
-      select_beat++;
+      if (do_lock_clock) {
+        select_beat = beat_num_total % sample_beats;
+      } else {
+        select_beat++;
+      }
       if (flag_half_time) {
         select_beat++;
         if (select_beat % 2 > 0)
@@ -1027,6 +1029,8 @@ int main(void) {
 
   // debouncing
   uint16_t debounce_sample = 0;
+  uint16_t debounce_lock_clock = 0;
+  uint16_t debounce_reset_fx = 0;
   uint32_t debounce_saving = 0;
   uint32_t debounce_led_save = 0;
   uint8_t debounce_led_sequencer = 0;
@@ -1082,6 +1086,16 @@ int main(void) {
       if (debounce_led_save > 0) {
         debounce_led_save--;
         ledStrip.fill(WS2812::RGB(150, 100, 0));
+      } else if (debounce_lock_clock > 0) {
+        debounce_lock_clock--;
+        if (do_lock_clock) {
+          ledStrip.fill(WS2812::RGB(200, 200, 0));
+        } else {
+          ledStrip.fill(WS2812::RGB(0, 200, 200));
+        }
+      } else if (debounce_reset_fx > 0) {
+        debounce_reset_fx--;
+        ledStrip.fill(WS2812::RGB(200, 200, 200));
       } else if (do_mute) {
         ledStrip.fill(WS2812::RGB(255, 0, 50));
       } else if (sequencer.IsRecording()) {
@@ -1205,6 +1219,30 @@ int main(void) {
       for (uint8_t i = 0; i < NUM_BUTTONS; i++) {
         if (midi_button1 != i && midi_button2 != i) {
           input_button[i].Read();
+        }
+        if (input_button[1].ChangedHigh(true) ||
+            input_button[2].ChangedHigh(true) ||
+            input_button[5].ChangedHigh(true) ||
+            input_button[6].ChangedHigh(true)) {
+          if (input_button[1].On() && input_button[2].On() &&
+              input_button[5].On() && input_button[6].On()) {
+            debounce_lock_clock = 80;
+            do_lock_clock = !do_lock_clock;
+          }
+        }
+        if (input_button[0].ChangedHigh(true) ||
+            input_button[1].ChangedHigh(true) ||
+            input_button[6].ChangedHigh(true) ||
+            input_button[7].ChangedHigh(true)) {
+          if (input_button[0].On() && input_button[1].On() &&
+              input_button[6].On() && input_button[7].On()) {
+            debounce_reset_fx = 80;
+            // reset fx
+            param_set_break(0, filter_fc, distortion, probability_jump,
+                            probability_retrig, probability_gate,
+                            probability_direction, probability_tunnel,
+                            save_data);
+          }
         }
         if (input_button[0].ChangedHigh(true) ||
             input_button[3].ChangedHigh(true) ||
