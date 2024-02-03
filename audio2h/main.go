@@ -112,7 +112,7 @@ func audio2h(files []File) (err error) {
 	sb.WriteString("const uint16_t retrigs[] = { " + strings.Join(retrigs, ", ") + " };")
 
 	sampleStart := 0
-	silentBytes := 65536
+	silentBytes := 65536*2
 	sb.WriteString("\n\n// filename: dummy\n")
 	sb.WriteString(fmt.Sprintf("#define RAW_DUMMY_BEATS 1\n"))
 	sb.WriteString(fmt.Sprintf("#define RAW_DUMMY_SAMPLES %d\n", silentBytes))
