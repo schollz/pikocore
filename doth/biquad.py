@@ -1,6 +1,4 @@
 import math
-from icecream import ic
-
 
 # https://stackoverflow.com/questions/52547218/how-to-caculate-biquad-filter-coefficient
 def coefficients(FC, FS, Q, dB, lowpass=True, ROUNDER=20):
@@ -35,8 +33,6 @@ def coefficients(FC, FS, Q, dB, lowpass=True, ROUNDER=20):
     a1 = round((1 << ROUNDER) * a1)
     a2 = round((1 << ROUNDER) * a2)
 
-    # ic(FC, FS, Q, dB)
-    # ic(a1, a2, b0, b1, b2)
     return (a1, a2, b0, b1, b2)
 
 

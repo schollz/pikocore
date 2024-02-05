@@ -6,10 +6,10 @@ prereqs: pico-sdk
 ifeq ($(shell uname),Darwin)
 	brew install clang-format cmake gcc minicom sox python3
 	brew install --cask gcc-arm-embedded
-	python3 -m pip install matplotlib numpy icecream
+	python3 -m pip install matplotlib numpy
 else
 	sudo apt install -y clang-format cmake gcc-arm-none-eabi gcc g++ minicom sox python3 python3-pip
-	sudo -H python3 -m pip install matplotlib numpy icecream
+	sudo -H python3 -m pip install matplotlib numpy
 endif
 
 doth/easing.h:
