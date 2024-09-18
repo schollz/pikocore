@@ -1,5 +1,7 @@
 build16: pico-sdk changeto16 quick
 
+build4: pico-sdk changeto4 quick
+
 build2: pico-sdk changeto2 quick
 
 prereqs: pico-sdk
@@ -33,12 +35,16 @@ else
 	sed -i 's/LENGTH = 2048k/LENGTH = 16384k/g' pico-sdk/src/rp2_common/pico_standard_link/memmap_default.ld
 endif
 
-changeto2:
+changeto2: pico-sdk
 ifeq ($(shell uname),Darwin)
 	sed -i '' 's/LENGTH = 16384k/LENGTH = 2048k/g' pico-sdk/src/rp2_common/pico_standard_link/memmap_default.ld
 else
 	sed -i 's/LENGTH = 16384k/LENGTH = 2048k/g' pico-sdk/src/rp2_common/pico_standard_link/memmap_default.ld
 endif
+
+changeto4:
+	sed -i 's/LENGTH = 16384k/LENGTH = 4096k/g' pico-sdk/src/rp2_common/pico_standard_link/memmap_default.ld
+	sed -i 's/LENGTH = 2048k/LENGTH = 4096k/g' pico-sdk/src/rp2_common/pico_standard_link/memmap_default.ld
 
 audio:
 	cd audio2h && rm -rf converted
@@ -55,6 +61,7 @@ clean:
 
 pico-sdk:
 	git clone https://github.com/raspberrypi/pico-sdk
+	cd pico-sdk && git checkout 1.5.1
 	cd pico-sdk && git submodule update --init
 
 debug:
