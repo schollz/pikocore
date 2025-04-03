@@ -8,6 +8,18 @@ pikocore is a hackable, open-source, lo-fi music mangler based on the Raspberry 
 read more here: https://pikocore.com
 
 
+## diy
+
+- [Website](https://pikocore.com)
+- [Schematic](https://infinitedigits.co/img/pikocore_schematic.png)
+- [Bom](https://infinitedigits.co/wares/pikocore/#bom)
+- [Source code](https://github.com/schollz/pikocore)
+- [Firmware](https://infinitedigits.co/wares/pikocore/#firmware)
+- [Instructions for uploading firmware](https://infinitedigits.co/wares/pikocore/#update) 
+- [Video demonstration](https://www.youtube.com/watch?v=mKPq1Chm9Tg)
+- [Video DIY guide](https://www.youtube.com/watch?v=VG0q74ASlLQ)
+
+
 ## usage
 
 ### prerequisites
