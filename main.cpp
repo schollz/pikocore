@@ -29,7 +29,7 @@
 #include "doth/trigger_out.h"
 
 // constants
-#define CLOCK_RATE 264000
+#define CLOCK_RATE 248000
 #define NUM_BUTTONS 8
 #define NUM_KNOBS 3
 #define NUM_LEDS 8
@@ -583,7 +583,7 @@ void pwm_interrupt_handler() {
     } else {
       // update the sample
       noise_gate_val++;
-      if (noise_gate_val<10 & noise_gate_fade> 0) {
+      if (noise_gate_val < 10 & noise_gate_fade > 0) {
         // noise gate fade in
         noise_gate_fade--;
       } else if (noise_gate_val > noise_gate_thresh_use) {

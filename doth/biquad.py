@@ -68,7 +68,7 @@ for i, note in enumerate(notes):
     else:
         print(f"  else if (f=={i}) " + "{")
     freq = midi2freq(note)
-    (a1, a2, b0, b1, b2) = coefficients(freq, 33000, q, 0, ROUNDER)
+    (a1, a2, b0, b1, b2) = coefficients(freq, 31000, q, 0, ROUNDER)
     print(
         f"      y = {b0} * x + {b1} * x1_f + {b2} * x2_f - {a1} * y1_f - {a2} * y2_f; "
     )
@@ -104,7 +104,7 @@ for i, note in enumerate(notes):
     else:
         print(f"  else if (f=={i}) " + "{")
     freq = midi2freq(note)
-    (a1, a2, b0, b1, b2) = coefficients(freq, 33000, q, 16, False, ROUNDER)
+    (a1, a2, b0, b1, b2) = coefficients(freq, 31000, q, 16, False, ROUNDER)
     print(
         f"      y = {b0} * x + {b1} * xh1_f + {b2} * xh2_f - {a1} * yh1_f - {a2} * yh2_f; "
     )

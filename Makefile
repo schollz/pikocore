@@ -29,27 +29,21 @@ quick: doth/easing.h doth/filter.h
 	echo "BUILD SUCCESS"
 
 changeto16:
-ifeq ($(shell uname),Darwin)
-	sed -i '' 's/LENGTH = 2048k/LENGTH = 16384k/g' pico-sdk/src/rp2_common/pico_standard_link/memmap_default.ld
-else
-	sed -i 's/LENGTH = 2048k/LENGTH = 16384k/g' pico-sdk/src/rp2_common/pico_standard_link/memmap_default.ld
-endif
+	sed -i 's/(2 \* 1024 \* 1024)/(16 \* 1024 \* 1024)/g' CMakeLists.txt
+	sed -i 's/(4 \* 1024 \* 1024)/(16 \* 1024 \* 1024)/g' CMakeLists.txt
 
-changeto2: pico-sdk
-ifeq ($(shell uname),Darwin)
-	sed -i '' 's/LENGTH = 16384k/LENGTH = 2048k/g' pico-sdk/src/rp2_common/pico_standard_link/memmap_default.ld
-else
-	sed -i 's/LENGTH = 16384k/LENGTH = 2048k/g' pico-sdk/src/rp2_common/pico_standard_link/memmap_default.ld
-endif
+changeto2:
+	sed -i 's/(16 \* 1024 \* 1024)/(2 \* 1024 \* 1024)/g' CMakeLists.txt
+	sed -i 's/(4 \* 1024 \* 1024)/(2 \* 1024 \* 1024)/g' CMakeLists.txt
 
 changeto4:
-	sed -i 's/LENGTH = 16384k/LENGTH = 4096k/g' pico-sdk/src/rp2_common/pico_standard_link/memmap_default.ld
-	sed -i 's/LENGTH = 2048k/LENGTH = 4096k/g' pico-sdk/src/rp2_common/pico_standard_link/memmap_default.ld
+	sed -i 's/(16 \* 1024 \* 1024)/(4 \* 1024 \* 1024)/g' CMakeLists.txt
+	sed -i 's/(2 \* 1024 \* 1024)/(4 \* 1024 \* 1024)/g' CMakeLists.txt
 
 audio:
 	cd audio2h && rm -rf converted
 	cd audio2h && mkdir converted
-	cd audio2h && go run main.go --limit 1 --bpm 165 --sr 33000 --folder-in demo
+	cd audio2h && go run main.go --limit 1 --bpm 165 --sr 31000 --folder-in demo
 
 clean:
 	rm -rf build
@@ -61,7 +55,7 @@ clean:
 
 pico-sdk:
 	git clone https://github.com/raspberrypi/pico-sdk
-	cd pico-sdk && git checkout 1.5.1
+	cd pico-sdk && git checkout 2.1.1
 	cd pico-sdk && git submodule update --init
 
 debug:

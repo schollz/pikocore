@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.18)
 
 set(PICO_SDK_PATH "../pico-sdk")
 
+set(PICO_FLASH_SIZE_BYTES "(16 * 1024 * 1024)")
+
 include(pico_sdk_import.cmake)
 
 project(pikocore C CXX ASM)
