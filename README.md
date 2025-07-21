@@ -1,5 +1,6 @@
 # pikocore
 
+[![build](https://github.com/schollz/pikocore/actions/workflows/build.yml/badge.svg)](https://github.com/schollz/pikocore/actions/workflows/build.yml)
 
 pikocore is a hackable, open-source, lo-fi music mangler based on the Raspberry Pi Pico.
 
