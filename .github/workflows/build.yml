@@ -1,0 +1,63 @@
+name: build
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v4.2.2
+      - name: Install sox
+        run: |
+          sudo apt update
+          sudo apt install sox libsox-fmt-mp3
+      - name: Set up Python
+        uses: actions/setup-python@v5.6.0
+        with:
+          python-version: "3.11"
+      - name: Setup Go
+        uses: actions/setup-go@v5.5.0
+      - name: Install Pico SDK dependencies
+        run: |
+          sudo apt update
+          sudo apt install cmake gcc-arm-none-eabi libnewlib-arm-none-eabi build-essential gcc wget tar clang-format
+      - name: Create and activate a Python virtual environment
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          uv venv .venv
+          echo "VIRTUAL_ENV=.venv" >> $GITHUB_ENV
+          echo "$PWD/.venv/bin" >> $GITHUB_PATH
+      - name: Install Python dependencies
+        run: uv pip install -r requirements.txt
+      - run: uv pip freeze
+      - name: Checkout pico-sdk
+        uses: actions/checkout@v4.2.2
+        with:
+          repository: raspberrypi/pico-sdk
+          path: pico-sdk
+          submodules: true
+          ref: 2.1.1
+      - name: Checkout pico-extras
+        uses: actions/checkout@v4.2.2
+        with:
+          repository: raspberrypi/pico-extras
+          path: pico-extras
+          submodules: true
+          ref: sdk-2.1.1
+      - name: Patch tinyusb
+        run: |
+          sed -i 's/OSAL_TIMEOUT_WAIT_FOREVER/OSAL_TIMEOUT_NORMAL/g' $GITHUB_WORKSPACE/pico-sdk/lib/tinyusb/src/tusb.c
+          cat $GITHUB_WORKSPACE/pico-sdk/lib/tinyusb/src/tusb.c | grep osal_mutex
+      - name: Set PICO_SDK_PATH
+        run: echo "PICO_SDK_PATH=$GITHUB_WORKSPACE/pico-sdk" >> $GITHUB_ENV
+      - name: Build uf2
+        run: |
+          make audio 
+          make
