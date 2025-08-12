@@ -11,7 +11,11 @@
 #include "hardware/irq.h"    // interrupts
 #include "hardware/pwm.h"    // pwm
 #include "hardware/sync.h"   // wait for interrupt
-#include "pico/stdlib.h"     // stdlib
+#include "pico/binary_info.h"
+#include "pico/stdlib.h"  // stdlib
+//
+#include "bsp/board.h"
+#include "tusb.h"
 
 // pikocore files
 #include "doth/audio2h.h"
@@ -23,13 +27,14 @@
 #include "doth/knob.h"
 #include "doth/led.h"
 #include "doth/ledarray.h"
+#include "doth/midi_out.h"
 #include "doth/onewiremidi.h"
 #include "doth/runningavg.h"
 #include "doth/sequencer.h"
 #include "doth/trigger_out.h"
 
 // constants
-#define CLOCK_RATE 248000
+#define CLOCK_RATE (SAMPLE_RATE * 8)  // clock rate in kHz
 #define NUM_BUTTONS 8
 #define NUM_KNOBS 3
 #define NUM_LEDS 8
@@ -65,9 +70,16 @@
 #define SAVE_PROB_JUMP 10
 #define SAVE_PROB_GATE 11
 #define SAVE_PROB_TUNNEL 12
+#define FLASH_TARGET_OFFSET2 FLASH_TARGET_OFFSET * 2
+
+#define MIDI_NOTES_AVAILABLE_TOTAL 28
+uint8_t midi_notes_available[MIDI_NOTES_AVAILABLE_TOTAL] = {
+    36, 38, 40, 41, 43, 45, 47, 48, 50, 52, 53, 55, 57, 59,
+    60, 62, 64, 65, 67, 69, 71, 72, 74, 76, 77, 79, 81, 83};
+uint8_t midi_notes_set[8] = {36, 38, 40, 41, 43, 45, 47, 48};
 
 const uint8_t *flash_target_contents =
-    (const uint8_t *)(XIP_BASE + FLASH_TARGET_OFFSET);
+    (const uint8_t *)(XIP_BASE + FLASH_TARGET_OFFSET2);
 
 // inputs
 Button input_button[NUM_BUTTONS];
@@ -84,6 +96,9 @@ uint8_t audio_clk = 0;
 uint8_t audio_clk_thresh = 48;
 bool do_mute = false;
 uint8_t do_mute_debounce = 0;
+
+// midi out
+MidiOut *midiout;
 
 // sample tracking
 uint16_t sample = 0;
@@ -334,6 +349,7 @@ void pwm_interrupt_handler() {
             select_beat_freeze = (select_beat / NUM_BUTTONS) * NUM_BUTTONS;
           }
           button_on = i;
+
 // select new beat
 #ifdef DEBUG_BUTTONS
           printf("%d on\n", button_on);
@@ -558,6 +574,8 @@ void pwm_interrupt_handler() {
       printf("select_beat:%d for %d samples\n", select_beat,
              retrigs[retrig_sel] << flag_half_time);
 #endif
+      MidiOut_on(midiout, midi_notes_set[(select_beat % 8)], 127);
+
       if (do_switch_heads) {
         phase_head = 1 - phase_head;  // switch heads
         phase_xfade = 1 << HEAD_SHIFT;
@@ -622,6 +640,10 @@ void pwm_interrupt_handler() {
         if (retrig_filter > 0) {
           retrig_filter--;
         }
+
+        MidiOut_on(midiout, midi_notes_set[(select_beat % 8)],
+                   120 * retrig_count / retrig_max);
+
         // printf("retrig_volume_reduce_change: %d\n",
         //        retrig_volume_reduce_change);
         // printf("retrig_volume_reduce: %d\n", retrig_volume_reduce);
@@ -880,18 +902,27 @@ void midi_note_on(uint8_t note, uint8_t velocity) {
 }
 
 void midi_start() {
+#ifdef DEBUG_MIDI
+  printf("midi start\n");
+#endif
   do_start_everything();
   soft_sync = false;
   btn_reset = false;
   midi_timing_count = 24 * MIDI_RESET_EVERY_BEAT - 1;
 }
 void midi_continue() {
+#ifdef DEBUG_MIDI
+  printf("midi continue (starting)\n");
+#endif
   do_start_everything();
   soft_sync = false;
   btn_reset = false;
   midi_timing_count = 24 * MIDI_RESET_EVERY_BEAT - 1;
 }
 void midi_stop() {
+#ifdef DEBUG_MIDI
+  printf("midi stop\n");
+#endif
   do_stop_everything();
   soft_sync = false;
   btn_reset = false;
@@ -993,6 +1024,9 @@ int main(void) {
     input_knob[i].Init(i, 50);
   }
 
+  // initialize midi out
+  midiout = MidiOut_malloc(0, true);
+
   // initialize sequencer
   sequencer.Init();
 
@@ -1066,8 +1100,12 @@ int main(void) {
   );
 #endif
 
+  // setup usb
+  tusb_init();
+
   // control loop
   while (1) {
+    tud_task();
     __wfi();  // Wait for Interrupt
     clock_ms++;
     clock_sync_ms++;
@@ -1150,8 +1188,8 @@ int main(void) {
         print_buf(save_data, FLASH_PAGE_SIZE);
 #endif
         uint32_t ints = save_and_disable_interrupts();
-        flash_range_erase(FLASH_TARGET_OFFSET, FLASH_SECTOR_SIZE);
-        flash_range_program(FLASH_TARGET_OFFSET, save_data, FLASH_PAGE_SIZE);
+        flash_range_erase(FLASH_TARGET_OFFSET2, FLASH_SECTOR_SIZE);
+        flash_range_program(FLASH_TARGET_OFFSET2, save_data, FLASH_PAGE_SIZE);
         restore_interrupts(ints);
 #ifdef DEBUG_SAVE
         printf("saved!\n");
@@ -1168,7 +1206,7 @@ int main(void) {
       debounce_saving = 0;
 #ifdef DEBUG_SAVE
       printf("\n\n\nPICO_FLASH_SIZE_BYTES: \t%d\n", PICO_FLASH_SIZE_BYTES);
-      printf("FLASH_TARGET_OFFSET: \t%d\n", FLASH_TARGET_OFFSET);
+      printf("FLASH_TARGET_OFFSET2: \t%d\n", FLASH_TARGET_OFFSET2);
       printf("FLASH_PAGE_SIZE: \t%d\n", FLASH_PAGE_SIZE);
       printf("FLASH_SECTOR_SIZE: \t%d\n", FLASH_SECTOR_SIZE);
       printf("XIP_BASE: \t%d\n", XIP_BASE);
@@ -1220,6 +1258,9 @@ int main(void) {
         if (midi_button1 != i && midi_button2 != i) {
           input_button[i].Read();
         }
+        // if (input_button[i].ChangedHigh(false)) {
+        //   MidiOut_on(midiout, midi_notes[(i % 8)], 127);
+        // }
         if (input_button[1].ChangedHigh(true) ||
             input_button[2].ChangedHigh(true) ||
             input_button[5].ChangedHigh(true) ||
@@ -1248,7 +1289,6 @@ int main(void) {
             input_button[3].ChangedHigh(true) ||
             input_button[4].ChangedHigh(true) ||
             input_button[7].ChangedHigh(true)) {
-          printf("changed high!\n");
           // button combo
           if (input_button[0].On() && input_button[3].On() &&
               input_button[4].On() && input_button[7].On()) {
@@ -1257,7 +1297,7 @@ int main(void) {
             } else {
               do_stop_everything();
             }
-            printf("switching do mute: %d\n", do_mute);
+            // printf("switching do mute: %d\n", do_mute);
           }
         }
 #ifdef DEBUG_BUTTONS
@@ -1278,6 +1318,19 @@ int main(void) {
       if (!btn_retrig) {
         for (uint8_t i = 0; i < NUM_KNOBS; i++) {
           input_knob[i].Read();
+
+          // set the current midi note if a button is held down
+          if (input_knob[i].Changed() && i == 0) {
+            // midi_notes_set
+            for (uint8_t j = 0; j < NUM_BUTTONS; j++) {
+              if (input_button[j].On()) {
+                midi_notes_set[j] =
+                    midi_notes_available[input_knob[i].Value() *
+                                         MIDI_NOTES_AVAILABLE_TOTAL / 4095];
+              }
+            }
+          }
+
           if (input_knob[i].Changed() || first_time) {
             if (i == 0) {
               uint8_t selector_knob_before = selector_knob;

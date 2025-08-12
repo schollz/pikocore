@@ -33,23 +33,15 @@ make prereqs
 
 This will install `clang-format`, `cmake`, the pico toolchain, `gcc`, `python`, and other useful packages.
 
-### create audio
-
-You can use the default audio by just running
-
-```
-SAMPLE_RATE=31000 make audio
-```
-
-The audio is taken from the `audio2h/demo` folder. You can edit the `Makefile` to choose a different folder. The max sample rate is 31khz, but if that doesn't work, try reducing it.
 
 ### build
 
-To build just run
 
 ```
-make
+SAMPLE_RATE=31000 make
 ```
+
+The audio is taken from the `audio2h/demo` folder. You can edit the `Makefile` to choose a different folder. The max sample rate is 31khz, but if that doesn't work, try reducing it.
 
 If you are using a 2mb pico, then you should do `make build2` (the default is 16mb).
 

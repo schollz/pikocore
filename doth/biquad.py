@@ -1,5 +1,12 @@
 import math
 from icecream import ic
+import sys
+
+# first argument is sample rate
+if len(sys.argv) > 1:
+    sample_rate = int(sys.argv[1])
+else:
+    raise ValueError("Sample rate must be provided as the first argument")
 
 
 # https://stackoverflow.com/questions/52547218/how-to-caculate-biquad-filter-coefficient
@@ -48,6 +55,7 @@ def midi2freq(note):
 ROUNDER = 20
 q = 0.707 * 2.5
 notes = list(range(76, 122))
+print(f"// Sample rate: {sample_rate} Hz")
 print(f"#define LPF_MAX {len(notes)-1}")
 print("int32_t x1_f, x2_f, y1_f, y2_f;")
 print("uint8_t filter_lpf(int32_t x, int32_t f_, uint8_t q) {")
@@ -68,7 +76,7 @@ for i, note in enumerate(notes):
     else:
         print(f"  else if (f=={i}) " + "{")
     freq = midi2freq(note)
-    (a1, a2, b0, b1, b2) = coefficients(freq, 31000, q, 0, ROUNDER)
+    (a1, a2, b0, b1, b2) = coefficients(freq, sample_rate, q, 0, ROUNDER)
     print(
         f"      y = {b0} * x + {b1} * x1_f + {b2} * x2_f - {a1} * y1_f - {a2} * y2_f; "
     )
@@ -104,7 +112,7 @@ for i, note in enumerate(notes):
     else:
         print(f"  else if (f=={i}) " + "{")
     freq = midi2freq(note)
-    (a1, a2, b0, b1, b2) = coefficients(freq, 31000, q, 16, False, ROUNDER)
+    (a1, a2, b0, b1, b2) = coefficients(freq, sample_rate, q, 16, False, ROUNDER)
     print(
         f"      y = {b0} * x + {b1} * xh1_f + {b2} * xh2_f - {a1} * yh1_f - {a2} * yh2_f; "
     )

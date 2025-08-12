@@ -19,10 +19,13 @@ doth/easing.h:
 	clang-format -i --style=google doth/easing.h
 
 doth/filter.h:
-	cd doth && python3 biquad.py > filter.h
+	cd doth && python3 biquad.py $(SAMPLE_RATE) > filter.h
 	clang-format -i --style=google doth/filter.h
 
 quick: doth/easing.h doth/filter.h
+	cd audio2h && rm -rf converted
+	cd audio2h && mkdir converted
+	cd audio2h && go run main.go --limit 1 --bpm 165 --sr ${SAMPLE_RATE} --folder-in demo
 	mkdir -p build
 	cd build && cmake ..
 	cd build && make -j4
@@ -39,11 +42,6 @@ changeto2:
 changeto4:
 	sed -i 's/(16 \* 1024 \* 1024)/(4 \* 1024 \* 1024)/g' CMakeLists.txt
 	sed -i 's/(2 \* 1024 \* 1024)/(4 \* 1024 \* 1024)/g' CMakeLists.txt
-
-audio:
-	cd audio2h && rm -rf converted
-	cd audio2h && mkdir converted
-	cd audio2h && go run main.go --limit 1 --bpm 165 --sr ${SAMPLE_RATE} --folder-in demo
 
 clean:
 	rm -rf build

@@ -1,4 +1,5 @@
 # Prerequisites
+pico-sdk/
 *.d
 
 # Compiled Object files
