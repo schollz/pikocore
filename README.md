@@ -38,10 +38,10 @@ This will install `clang-format`, `cmake`, the pico toolchain, `gcc`, `python`, 
 You can use the default audio by just running
 
 ```
-make audio
+SAMPLE_RATE=31000 make audio
 ```
 
-The audio is taken from the `audio2h/demo` folder. You can edit the `Makefile` to choose a different folder.
+The audio is taken from the `audio2h/demo` folder. You can edit the `Makefile` to choose a different folder. The max sample rate is 31khz, but if that doesn't work, try reducing it.
 
 ### build
 

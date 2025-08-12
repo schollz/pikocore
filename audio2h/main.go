@@ -112,7 +112,7 @@ func audio2h(files []File) (err error) {
 	sb.WriteString("const uint16_t retrigs[] = { " + strings.Join(retrigs, ", ") + " };")
 
 	sampleStart := 0
-	silentBytes := 65536*2
+	silentBytes := 65536 * 2
 	sb.WriteString("\n\n// filename: dummy\n")
 	sb.WriteString(fmt.Sprintf("#define RAW_DUMMY_BEATS 1\n"))
 	sb.WriteString(fmt.Sprintf("#define RAW_DUMMY_SAMPLES %d\n", silentBytes))
@@ -228,6 +228,7 @@ func getFiles(folderName string) (files []File, err error) {
 					return nil
 				}
 				ext := filepath.Ext(pathname)
+				ext = strings.ToLower(ext)
 				if ext == ".flac" || ext == ".wav" || ext == ".mp3" || ext == ".aif" || ext == ".ogg" {
 					fnames = append(fnames, pathname)
 				}

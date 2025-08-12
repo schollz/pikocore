@@ -43,7 +43,7 @@ changeto4:
 audio:
 	cd audio2h && rm -rf converted
 	cd audio2h && mkdir converted
-	cd audio2h && go run main.go --limit 1 --bpm 165 --sr 31000 --folder-in demo
+	cd audio2h && go run main.go --limit 1 --bpm 165 --sr ${SAMPLE_RATE} --folder-in demo
 
 clean:
 	rm -rf build
