@@ -36,6 +36,14 @@ void MidiOut_on(MidiOut *self, uint8_t note, uint8_t velocity) {
   self->last = note;
 }
 
+void MidiOut_cc(MidiOut *self, uint8_t cc, uint8_t value) {
+  uint8_t msg[3];
+  msg[0] = 0xB0 | (self->channel & 0x0F);
+  msg[1] = cc & 0x7F;
+  msg[2] = value & 0x7F;
+  tud_midi_n_stream_write(0, 0, msg, 3);
+}
+
 void MidiOut_off(MidiOut *self, uint8_t note) {
   uint8_t msg[3];
   msg[0] = 0x80 | (self->channel & 0x0F);

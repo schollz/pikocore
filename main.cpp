@@ -1369,6 +1369,10 @@ int main(void) {
 #ifdef DEBUG_KNOB
               printf("%d: %d; \n", i, input_knob[i].Value());
 #endif
+              MidiOut_cc(midiout, 14 + selector_knob,
+                         input_knob[i].Value() * 127 /
+                             input_knob[i].ValueMax());
+
               /////////////
               // KNOB A //
               ////////////
@@ -1474,6 +1478,10 @@ int main(void) {
               printf("[%d] %d: %d; \n", selector_knob, i,
                      input_knob[i].Value());
 #endif
+
+              MidiOut_cc(midiout, 22 + selector_knob,
+                         input_knob[i].Value() * 127 /
+                             input_knob[i].ValueMax());
 
               switch (selector_knob) {
                 case 0:
