@@ -405,6 +405,27 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 // Main
 // ----------------------------------------------------------------------------
 
+func gitInfo() (branch, commit string) {
+	branch = "unknown"
+	commit = "unknown"
+	if b, err := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD").Output(); err == nil {
+		branch = strings.TrimSpace(string(b))
+	}
+	if c, err := exec.Command("git", "rev-parse", "--short", "HEAD").Output(); err == nil {
+		commit = strings.TrimSpace(string(c))
+	}
+	return
+}
+
+func handleInfo(w http.ResponseWriter, r *http.Request) {
+	branch, commit := gitInfo()
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"branch": branch,
+		"commit": commit,
+	})
+}
+
 func main() {
 	var err error
 	repoRoot, err = os.Getwd()
@@ -421,6 +442,7 @@ func main() {
 	http.HandleFunc("/build", handleBuild)
 	http.HandleFunc("/events", handleEvents)
 	http.HandleFunc("/download", handleDownload)
+	http.HandleFunc("/info", handleInfo)
 
 	port := "8765"
 	url := "http://localhost:" + port
@@ -443,371 +465,688 @@ const htmlPage = `<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>pikocore firmware builder</title>
+<title>pikocore — build firmware</title>
 <style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-  :root {
-    --bg:        #111318;
-    --surface:   #1c1f27;
-    --border:    #2e3140;
-    --accent:    #6c8cff;
-    --accent2:   #a78bfa;
-    --success:   #34d399;
-    --error:     #f87171;
-    --text:      #e2e8f0;
-    --muted:     #64748b;
-    --radius:    10px;
-  }
+:root {
+  --bg:        #0d1117;
+  --surface:   #161b22;
+  --surface2:  #21262d;
+  --border:    #30363d;
+  --accent:    #58a6ff;
+  --accent-dim:#1f3a5f;
+  --success:   #3fb950;
+  --success-dim:#122d1a;
+  --warning:   #d29922;
+  --warning-dim:#2d2209;
+  --error:     #f85149;
+  --error-dim: #3d1212;
+  --text:      #e6edf3;
+  --text-muted:#8b949e;
+  --radius:    8px;
+  --radius-lg: 12px;
+}
 
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    min-height: 100vh;
-    padding: 2rem;
-  }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  font-size: 14px;
+  line-height: 1.5;
+}
 
-  header {
-    margin-bottom: 2rem;
-  }
-  header h1 {
-    font-size: 1.6rem;
-    font-weight: 700;
-    letter-spacing: -0.02em;
-  }
-  header p {
-    color: var(--muted);
-    margin-top: 0.25rem;
-    font-size: 0.9rem;
-  }
+/* ── Layout ── */
+.app-header {
+  border-bottom: 1px solid var(--border);
+  padding: 0.75rem 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  z-index: 10;
+}
+.app-header .logo {
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.app-header .logo span { color: var(--text-muted); font-weight: 400; }
+.git-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 0.2rem 0.65rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-family: "SF Mono", "Fira Code", monospace;
+}
+.git-badge .dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
 
-  .layout {
-    display: grid;
-    grid-template-columns: 380px 1fr;
-    gap: 1.5rem;
-    align-items: start;
-  }
+.main {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 1.5rem;
+  display: grid;
+  grid-template-columns: 360px 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
 
-  .card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 1.5rem;
-  }
+/* ── Info banner ── */
+.info-banner {
+  grid-column: 1 / -1;
+  background: var(--warning-dim);
+  border: 1px solid var(--warning);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  font-size: 0.83rem;
+  color: #e3c36a;
+  line-height: 1.5;
+}
+.info-banner .icon { flex-shrink: 0; margin-top: 1px; font-size: 0.95rem; }
+.info-banner strong { color: #f0d080; }
 
-  .card h2 {
-    font-size: 0.8rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--muted);
-    margin-bottom: 1rem;
-  }
+/* ── Cards ── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.card-header {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.step-badge {
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: var(--accent-dim);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-size: 0.7rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.step-badge.done {
+  background: var(--success-dim);
+  border-color: var(--success);
+  color: var(--success);
+}
+.card-header h2 {
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-muted);
+}
+.card-body { padding: 1rem; }
 
-  /* Drop zone */
-  #dropzone {
-    border: 2px dashed var(--border);
-    border-radius: var(--radius);
-    padding: 2rem 1rem;
-    text-align: center;
-    cursor: pointer;
-    transition: border-color 0.2s, background 0.2s;
-    margin-bottom: 1rem;
-  }
-  #dropzone:hover, #dropzone.over {
-    border-color: var(--accent);
-    background: rgba(108, 140, 255, 0.05);
-  }
-  #dropzone svg {
-    width: 32px;
-    height: 32px;
-    color: var(--muted);
-    margin-bottom: 0.5rem;
-  }
-  #dropzone p { color: var(--muted); font-size: 0.85rem; }
-  #dropzone strong { color: var(--accent); }
-  #file-input { display: none; }
+/* ── Drop zone ── */
+#dropzone {
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 1.5rem 1rem;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.15s;
+  margin-bottom: 0.75rem;
+}
+#dropzone:hover, #dropzone.over {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}
+#dropzone .dz-icon { font-size: 1.8rem; margin-bottom: 0.4rem; }
+#dropzone p { color: var(--text-muted); font-size: 0.83rem; }
+#dropzone strong { color: var(--accent); }
+#file-input { display: none; }
 
-  #file-list {
-    list-style: none;
-    margin-bottom: 1rem;
-    max-height: 160px;
-    overflow-y: auto;
-  }
-  #file-list li {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-size: 0.82rem;
-    padding: 0.3rem 0;
-    border-bottom: 1px solid var(--border);
-    color: var(--muted);
-  }
-  #file-list li:last-child { border-bottom: none; }
-  #file-list li span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  #file-list li button {
-    background: none;
-    border: none;
-    color: var(--error);
-    cursor: pointer;
-    font-size: 0.9rem;
-    line-height: 1;
-    padding: 0 2px;
-  }
+/* ── File list ── */
+#file-list {
+  list-style: none;
+  max-height: 150px;
+  overflow-y: auto;
+  margin-bottom: 0.5rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+#file-list:empty { display: none; }
+#file-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.8rem;
+}
+#file-list li:last-child { border-bottom: none; }
+#file-list li .fname { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+#file-list li .fsize { color: var(--text-muted); white-space: nowrap; }
+#file-list li button {
+  background: none; border: none; cursor: pointer;
+  color: var(--text-muted); font-size: 0.85rem; line-height: 1; padding: 0 2px;
+  transition: color 0.1s;
+}
+#file-list li button:hover { color: var(--error); }
+.file-count {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-align: right;
+  margin-bottom: 0.75rem;
+}
 
-  /* Options */
-  .options { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.25rem; }
-  .option-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.5rem;
-  }
-  .option-row label {
-    font-size: 0.85rem;
-    color: var(--text);
-  }
-  .option-row select, .option-row input[type=number] {
-    background: var(--bg);
-    border: 1px solid var(--border);
-    color: var(--text);
-    border-radius: 6px;
-    padding: 0.3rem 0.5rem;
-    font-size: 0.85rem;
-    width: 100px;
-    outline: none;
-  }
-  .option-row select:focus, .option-row input[type=number]:focus {
-    border-color: var(--accent);
-  }
+/* ── Options ── */
+.opts { display: flex; flex-direction: column; gap: 0; }
+.opt-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid var(--border);
+  gap: 0.5rem;
+}
+.opt-row:last-child { border-bottom: none; }
+.opt-label { font-size: 0.84rem; color: var(--text); }
+.opt-hint  { font-size: 0.73rem; color: var(--text-muted); margin-top: 1px; }
+.opt-row select, .opt-row input[type=number] {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.82rem;
+  width: 110px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.opt-row select:focus, .opt-row input:focus { border-color: var(--accent); }
 
-  /* Build button */
-  #build-btn {
-    width: 100%;
-    padding: 0.75rem;
-    background: var(--accent);
-    color: #fff;
-    font-size: 0.95rem;
-    font-weight: 600;
-    border: none;
-    border-radius: var(--radius);
-    cursor: pointer;
-    transition: background 0.2s, opacity 0.2s;
-  }
-  #build-btn:hover { background: #7c9eff; }
-  #build-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+/* ── Build button ── */
+#build-btn {
+  width: 100%;
+  padding: 0.7rem;
+  background: var(--accent);
+  color: #0d1117;
+  font-size: 0.9rem;
+  font-weight: 700;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+  margin-top: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+}
+#build-btn:hover:not(:disabled) { background: #79b8ff; }
+#build-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 
-  /* Log terminal */
-  #log-card { display: flex; flex-direction: column; height: 540px; }
-  #log-card h2 { flex-shrink: 0; }
-  #log {
-    flex: 1;
-    background: #0a0c10;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 0.75rem 1rem;
-    font-family: "JetBrains Mono", "Fira Code", "SF Mono", monospace;
-    font-size: 0.78rem;
-    line-height: 1.6;
-    overflow-y: auto;
-    white-space: pre-wrap;
-    word-break: break-all;
-    color: #a0aec0;
-  }
-  #log .log-arrow  { color: var(--accent2); }
-  #log .log-ok     { color: var(--success); }
-  #log .log-error  { color: var(--error); }
+/* ── Right panel ── */
+.right-panel { display: flex; flex-direction: column; gap: 1rem; }
 
-  /* Download */
-  #download-area {
-    margin-top: 1rem;
-    display: none;
-  }
-  #download-btn {
-    width: 100%;
-    padding: 0.75rem;
-    background: var(--success);
-    color: #064e3b;
-    font-size: 0.95rem;
-    font-weight: 700;
-    border: none;
-    border-radius: var(--radius);
-    cursor: pointer;
-    text-decoration: none;
-    display: block;
-    text-align: center;
-    transition: background 0.2s;
-  }
-  #download-btn:hover { background: #6ee7b7; }
+/* ── Progress steps ── */
+.build-steps {
+  display: flex;
+  gap: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.build-step {
+  flex: 1;
+  padding: 0.6rem 0.5rem;
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  border-right: 1px solid var(--border);
+  transition: all 0.2s;
+  position: relative;
+}
+.build-step:last-child { border-right: none; }
+.build-step .bs-icon { font-size: 1rem; display: block; margin-bottom: 2px; }
+.build-step.active { background: var(--accent-dim); color: var(--accent); }
+.build-step.done   { background: var(--success-dim); color: var(--success); }
+.build-step.error  { background: var(--error-dim);   color: var(--error);   }
 
-  #status-badge {
-    margin-top: 0.75rem;
-    font-size: 0.8rem;
-    text-align: center;
-    color: var(--muted);
-  }
-  #status-badge.success { color: var(--success); }
-  #status-badge.error   { color: var(--error); }
-  #status-badge.running { color: var(--accent); }
+/* ── Log ── */
+.log-card { flex: 1; }
+#log-wrap {
+  background: #0a0d12;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  height: 320px;
+  overflow-y: auto;
+  padding: 0.75rem 1rem;
+  font-family: "SF Mono", "Fira Code", "JetBrains Mono", monospace;
+  font-size: 0.75rem;
+  line-height: 1.65;
+  color: #8b949e;
+}
+#log-wrap .l-step  { color: #79b8ff; }
+#log-wrap .l-ok    { color: var(--success); }
+#log-wrap .l-warn  { color: var(--warning); }
+#log-wrap .l-error { color: var(--error); }
 
-  @media (max-width: 800px) {
-    .layout { grid-template-columns: 1fr; }
-    #log-card { height: 360px; }
-  }
+/* ── Download / flash ── */
+.flash-card { display: none; }
+.flash-card.visible { display: block; }
+
+.flash-inner {
+  background: var(--success-dim);
+  border: 1px solid var(--success);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.flash-top {
+  padding: 1rem;
+  border-bottom: 1px solid rgba(63,185,80,0.25);
+}
+.flash-top h3 { font-size: 0.95rem; font-weight: 700; color: var(--success); margin-bottom: 0.25rem; }
+.flash-top p  { font-size: 0.8rem; color: #6ecea8; }
+
+#download-btn {
+  display: block;
+  width: calc(100% - 2rem);
+  margin: 1rem;
+  padding: 0.7rem;
+  background: var(--success);
+  color: #0d2818;
+  font-size: 0.9rem;
+  font-weight: 700;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  text-align: center;
+  text-decoration: none;
+  transition: background 0.15s;
+}
+#download-btn:hover { background: #56d364; }
+
+.flash-steps {
+  padding: 0 1rem 1rem;
+}
+.flash-steps h4 {
+  font-size: 0.73rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #6ecea8;
+  margin-bottom: 0.6rem;
+}
+.flash-steps ol {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.flash-steps ol li {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  font-size: 0.8rem;
+  color: #6ecea8;
+}
+.flash-steps ol li .num {
+  background: rgba(63,185,80,0.2);
+  border: 1px solid rgba(63,185,80,0.4);
+  border-radius: 50%;
+  width: 18px; height: 18px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.68rem; font-weight: 700;
+  flex-shrink: 0;
+  color: var(--success);
+}
+
+.error-card { display: none; }
+.error-card.visible {
+  display: block;
+  background: var(--error-dim);
+  border: 1px solid var(--error);
+  border-radius: var(--radius-lg);
+  padding: 1rem;
+  font-size: 0.83rem;
+  color: #ffa0a0;
+}
+.error-card h3 { color: var(--error); margin-bottom: 0.4rem; font-size: 0.9rem; }
+
+/* ── Overwrite warning ── */
+.overwrite-warn {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+  background: var(--warning-dim);
+  border: 1px solid rgba(210,153,34,0.4);
+  border-radius: var(--radius);
+  padding: 0.65rem 0.75rem;
+  font-size: 0.78rem;
+  color: #c9a840;
+  margin: 0 1rem 1rem;
+}
+.overwrite-warn .icon { flex-shrink: 0; }
+
+@media (max-width: 820px) {
+  .main { grid-template-columns: 1fr; }
+  .info-banner { grid-column: 1; }
+}
 </style>
 </head>
 <body>
 
-<header>
-  <h1>pikocore firmware builder</h1>
-  <p>Build custom firmware locally — no internet required.</p>
+<header class="app-header">
+  <div class="logo">pikocore <span>/ firmware builder</span></div>
+  <div class="git-badge">
+    <span class="dot"></span>
+    <span id="git-branch">loading…</span>
+    <span style="color:#444">@</span>
+    <span id="git-commit">…</span>
+  </div>
 </header>
 
-<div class="layout">
+<div class="main">
 
-  <!-- LEFT: upload + options -->
-  <div>
-    <div class="card" style="margin-bottom:1rem">
-      <h2>Audio files</h2>
-      <div id="dropzone">
-        <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round"
-            d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25
-               2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15
-               M9 12l3 3m0 0 3-3m-3 3V2.25"/>
-        </svg>
-        <p><strong>Click to choose</strong> or drag &amp; drop audio files</p>
-        <p style="margin-top:0.25rem;font-size:0.75rem">(WAV, FLAC, MP3 · max 254 files)</p>
-      </div>
-      <input type="file" id="file-input" multiple accept="audio/*">
-      <ul id="file-list"></ul>
+  <!-- Info banner -->
+  <div class="info-banner">
+    <span class="icon">💡</span>
+    <div>
+      <strong>Your audio files become the firmware.</strong>
+      pikocore has no SD card or file system — samples are compiled directly into flash memory.
+      Building generates a single <code>.uf2</code> binary that contains both the firmware logic
+      <em>and</em> your audio. Flashing it <strong>completely replaces</strong> everything currently on the device.
     </div>
+  </div>
 
+  <!-- LEFT column -->
+  <div style="display:flex;flex-direction:column;gap:1rem">
+
+    <!-- Step 1: Audio -->
     <div class="card">
-      <h2>Build options</h2>
-      <div class="options">
-        <div class="option-row">
-          <label>Pico flash size</label>
-          <select id="opt-size">
-            <option value="16" selected>16 mb</option>
-            <option value="4">4 mb</option>
-            <option value="2">2 mb</option>
-          </select>
+      <div class="card-header">
+        <div class="step-badge" id="step1-badge">1</div>
+        <h2>Audio samples</h2>
+      </div>
+      <div class="card-body">
+        <div id="dropzone">
+          <div class="dz-icon">🎵</div>
+          <p><strong>Click to choose</strong> or drag &amp; drop</p>
+          <p style="margin-top:3px;font-size:0.73rem">WAV · FLAC · MP3 &nbsp;·&nbsp; up to 254 files</p>
         </div>
-        <div class="option-row">
-          <label>Sample rate (Hz)</label>
-          <input type="number" id="opt-sr" value="31000" min="8000" max="48000" step="1000">
+        <input type="file" id="file-input" multiple accept="audio/*">
+        <ul id="file-list"></ul>
+        <div class="file-count" id="file-count"></div>
+      </div>
+    </div>
+
+    <!-- Step 2: Options -->
+    <div class="card">
+      <div class="card-header">
+        <div class="step-badge" id="step2-badge">2</div>
+        <h2>Build options</h2>
+      </div>
+      <div class="card-body">
+        <div class="opts">
+          <div class="opt-row">
+            <div><div class="opt-label">Pico flash size</div></div>
+            <select id="opt-size">
+              <option value="16" selected>16 mb</option>
+              <option value="4">4 mb</option>
+              <option value="2">2 mb</option>
+            </select>
+          </div>
+          <div class="opt-row">
+            <div>
+              <div class="opt-label">Sample rate</div>
+              <div class="opt-hint">lower if build fails</div>
+            </div>
+            <input type="number" id="opt-sr" value="31000" min="8000" max="48000" step="1000">
+          </div>
+          <div class="opt-row">
+            <div>
+              <div class="opt-label">RGB LED</div>
+            </div>
+            <select id="opt-rgb">
+              <option value="1" selected>enabled</option>
+              <option value="0">disabled</option>
+            </select>
+          </div>
+          <div class="opt-row">
+            <div>
+              <div class="opt-label">Sync input</div>
+              <div class="opt-hint">clock in or MIDI (itty bitty midi)</div>
+            </div>
+            <select id="opt-midi">
+              <option value="0" selected>clock</option>
+              <option value="1">midi</option>
+            </select>
+          </div>
+          <div class="opt-row">
+            <div>
+              <div class="opt-label">PCB V2 layout</div>
+              <div class="opt-hint">knobs A &amp; B swapped</div>
+            </div>
+            <select id="opt-v2">
+              <option value="0" selected>no</option>
+              <option value="1">yes</option>
+            </select>
+          </div>
         </div>
-        <div class="option-row">
-          <label>RGB LED</label>
-          <select id="opt-rgb">
-            <option value="1" selected>enabled</option>
-            <option value="0">disabled</option>
-          </select>
+        <button id="build-btn" disabled>
+          <span id="build-btn-icon">🔨</span>
+          <span id="build-btn-label">Build firmware</span>
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- RIGHT column -->
+  <div class="right-panel">
+
+    <!-- Step progress bar -->
+    <div class="build-steps">
+      <div class="build-step" id="ps-audio">
+        <span class="bs-icon">🎵</span>convert audio
+      </div>
+      <div class="build-step" id="ps-codegen">
+        <span class="bs-icon">⚙️</span>codegen
+      </div>
+      <div class="build-step" id="ps-cmake">
+        <span class="bs-icon">📐</span>cmake
+      </div>
+      <div class="build-step" id="ps-compile">
+        <span class="bs-icon">🔧</span>compile
+      </div>
+      <div class="build-step" id="ps-done">
+        <span class="bs-icon">✅</span>ready
+      </div>
+    </div>
+
+    <!-- Build log -->
+    <div class="card log-card">
+      <div class="card-header">
+        <div class="step-badge" id="step3-badge">3</div>
+        <h2>Build log</h2>
+      </div>
+      <div class="card-body" style="padding:0.5rem">
+        <div id="log-wrap"><span class="l-step">waiting for build…</span></div>
+      </div>
+    </div>
+
+    <!-- Success: download + flash instructions -->
+    <div class="flash-card" id="flash-card">
+      <div class="flash-inner">
+        <div class="flash-top">
+          <h3>✓ Firmware ready</h3>
+          <p>Your audio has been compiled into the firmware and is ready to flash.</p>
         </div>
-        <div class="option-row">
-          <label>Input type</label>
-          <select id="opt-midi">
-            <option value="0" selected>clock</option>
-            <option value="1">midi</option>
-          </select>
+        <a id="download-btn" href="#">⬇ Download pikocore.uf2</a>
+        <div class="overwrite-warn">
+          <span class="icon">⚠️</span>
+          <span>Flashing this file will <strong>completely erase</strong> the existing firmware and samples on your pikocore. There is no undo.</span>
         </div>
-        <div class="option-row">
-          <label>PCB V2 layout</label>
-          <select id="opt-v2">
-            <option value="0" selected>no</option>
-            <option value="1">yes</option>
-          </select>
+        <div class="flash-steps">
+          <h4>How to flash</h4>
+          <ol>
+            <li><span class="num">1</span><span>Hold the <strong>BOOTSEL</strong> button on the Pico, then plug it in via USB while holding it.</span></li>
+            <li><span class="num">2</span><span>Release BOOTSEL. A drive called <strong>RPI-RP2</strong> will appear on your desktop.</span></li>
+            <li><span class="num">3</span><span>Drag and drop <strong>pikocore.uf2</strong> onto the <strong>RPI-RP2</strong> drive.</span></li>
+            <li><span class="num">4</span><span>The drive disappears and pikocore reboots automatically — done!</span></li>
+          </ol>
         </div>
       </div>
-      <button id="build-btn" disabled>Build firmware</button>
     </div>
-  </div>
 
-  <!-- RIGHT: log + download -->
-  <div class="card" id="log-card">
-    <h2>Build log</h2>
-    <div id="log"><span class="log-arrow">waiting for build to start…</span></div>
-    <div id="download-area">
-      <a id="download-btn" href="#">⬇ Download pikocore.uf2</a>
+    <!-- Error card -->
+    <div class="error-card" id="error-card">
+      <h3>Build failed</h3>
+      <p>Check the log above for details. Common causes: missing toolchain, sample rate too high, or audio files in unsupported format.</p>
     </div>
-    <div id="status-badge"></div>
-  </div>
 
+  </div>
 </div>
 
 <script>
-  const dropzone   = document.getElementById('dropzone');
-  const fileInput  = document.getElementById('file-input');
-  const fileList   = document.getElementById('file-list');
-  const buildBtn   = document.getElementById('build-btn');
-  const logEl      = document.getElementById('log');
-  const dlArea     = document.getElementById('download-area');
-  const dlBtn      = document.getElementById('download-btn');
-  const statusEl   = document.getElementById('status-badge');
+  // ── Git info ──
+  fetch('/info').then(r => r.json()).then(d => {
+    document.getElementById('git-branch').textContent = d.branch;
+    document.getElementById('git-commit').textContent = d.commit;
+  }).catch(() => {});
+
+  // ── File handling ──
+  const dropzone  = document.getElementById('dropzone');
+  const fileInput = document.getElementById('file-input');
+  const fileList  = document.getElementById('file-list');
+  const fileCount = document.getElementById('file-count');
+  const buildBtn  = document.getElementById('build-btn');
+  const step1     = document.getElementById('step1-badge');
+  const step2     = document.getElementById('step2-badge');
+  const step3     = document.getElementById('step3-badge');
 
   let selectedFiles = [];
+
+  function fmtBytes(b) {
+    if (b < 1024)       return b + ' B';
+    if (b < 1048576)    return (b/1024).toFixed(1) + ' KB';
+    return (b/1048576).toFixed(1) + ' MB';
+  }
 
   function refreshFileList() {
     fileList.innerHTML = '';
     selectedFiles.forEach((f, i) => {
       const li = document.createElement('li');
-      const name = document.createElement('span');
-      name.textContent = f.name;
-      const btn = document.createElement('button');
-      btn.textContent = '✕';
-      btn.title = 'Remove';
-      btn.onclick = () => { selectedFiles.splice(i, 1); refreshFileList(); };
-      li.appendChild(name);
-      li.appendChild(btn);
+      const nm = document.createElement('span'); nm.className = 'fname'; nm.textContent = f.name;
+      const sz = document.createElement('span'); sz.className = 'fsize'; sz.textContent = fmtBytes(f.size);
+      const rm = document.createElement('button'); rm.textContent = '✕'; rm.title = 'Remove';
+      rm.onclick = () => { selectedFiles.splice(i, 1); refreshFileList(); };
+      li.append(nm, sz, rm);
       fileList.appendChild(li);
     });
-    buildBtn.disabled = selectedFiles.length === 0;
+    const n = selectedFiles.length;
+    fileCount.textContent = n > 0 ? n + ' file' + (n > 1 ? 's' : '') + ' selected' : '';
+    buildBtn.disabled = n === 0;
+    if (n > 0) step1.classList.add('done'); else step1.classList.remove('done');
   }
 
   dropzone.addEventListener('click', () => fileInput.click());
   dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('over'); });
   dropzone.addEventListener('dragleave', () => dropzone.classList.remove('over'));
   dropzone.addEventListener('drop', e => {
-    e.preventDefault();
-    dropzone.classList.remove('over');
+    e.preventDefault(); dropzone.classList.remove('over');
     addFiles(Array.from(e.dataTransfer.files));
   });
-  fileInput.addEventListener('change', () => {
-    addFiles(Array.from(fileInput.files));
-    fileInput.value = '';
-  });
+  fileInput.addEventListener('change', () => { addFiles(Array.from(fileInput.files)); fileInput.value = ''; });
 
   function addFiles(files) {
-    files.forEach(f => {
-      if (!selectedFiles.find(x => x.name === f.name)) selectedFiles.push(f);
-    });
+    files.forEach(f => { if (!selectedFiles.find(x => x.name === f.name)) selectedFiles.push(f); });
     refreshFileList();
   }
 
-  function appendLog(text, cls) {
-    const span = document.createElement('span');
-    if (cls) span.className = cls;
-    // colorize arrows/ticks/errors inline
-    if (!cls) {
-      if (text.startsWith('→') || text.startsWith('-')) span.className = 'log-arrow';
-      else if (text.startsWith('✓'))                     span.className = 'log-ok';
-      else if (text.toLowerCase().includes('error'))     span.className = 'log-error';
-    }
-    span.textContent = text + '\n';
-    logEl.appendChild(span);
-    logEl.scrollTop = logEl.scrollHeight;
+  // ── Log ──
+  const logWrap = document.getElementById('log-wrap');
+  function appendLog(text) {
+    const s = document.createElement('span');
+    if      (text.startsWith('→'))                       s.className = 'l-step';
+    else if (text.startsWith('✓'))                       s.className = 'l-ok';
+    else if (text.toLowerCase().includes('warning'))     s.className = 'l-warn';
+    else if (text.toLowerCase().includes('error'))       s.className = 'l-error';
+    s.textContent = text + '\n';
+    logWrap.appendChild(s);
+    logWrap.scrollTop = logWrap.scrollHeight;
   }
 
+  // ── Progress steps ──
+  const steps = {
+    audio:   document.getElementById('ps-audio'),
+    codegen: document.getElementById('ps-codegen'),
+    cmake:   document.getElementById('ps-cmake'),
+    compile: document.getElementById('ps-compile'),
+    done:    document.getElementById('ps-done'),
+  };
+
+  function resetSteps() {
+    Object.values(steps).forEach(el => el.className = 'build-step');
+  }
+  function setStep(name) {
+    // mark previous steps done
+    const order = ['audio','codegen','cmake','compile','done'];
+    const idx = order.indexOf(name);
+    order.forEach((k, i) => {
+      if (i < idx)       steps[k].className = 'build-step done';
+      else if (i === idx) steps[k].className = 'build-step active';
+      else               steps[k].className = 'build-step';
+    });
+  }
+  function allStepsDone(success) {
+    Object.values(steps).forEach(el => {
+      el.className = 'build-step ' + (success ? 'done' : 'error');
+    });
+  }
+
+  function inferStep(line) {
+    if (line.includes('converting audio'))  setStep('audio');
+    if (line.includes('generating'))        setStep('codegen');
+    if (line.includes('running cmake'))     setStep('cmake');
+    if (line.includes('compiling firmware'))setStep('compile');
+    if (line.includes('build successful'))  setStep('done');
+  }
+
+  // ── Build ──
   buildBtn.addEventListener('click', async () => {
     if (selectedFiles.length === 0) return;
 
+    // Reset UI
     buildBtn.disabled = true;
-    dlArea.style.display = 'none';
-    statusEl.className = 'running';
-    statusEl.textContent = 'building…';
-    logEl.innerHTML = '';
+    document.getElementById('build-btn-label').textContent = 'Building…';
+    document.getElementById('flash-card').classList.remove('visible');
+    document.getElementById('error-card').classList.remove('visible');
+    logWrap.innerHTML = '';
+    resetSteps();
+    step2.classList.add('done');
+    step3.className = 'step-badge';
 
     const form = new FormData();
     selectedFiles.forEach(f => form.append('files', f));
@@ -820,33 +1159,40 @@ const htmlPage = `<!DOCTYPE html>
     let buildId;
     try {
       const res = await fetch('/build', { method: 'POST', body: form });
-      if (!res.ok) { appendLog('server error: ' + await res.text(), 'log-error'); buildBtn.disabled = false; return; }
-      const data = await res.json();
-      buildId = data.id;
+      if (!res.ok) {
+        appendLog('server error: ' + await res.text());
+        buildBtn.disabled = false;
+        document.getElementById('build-btn-label').textContent = 'Build firmware';
+        return;
+      }
+      buildId = (await res.json()).id;
     } catch(e) {
-      appendLog('network error: ' + e.message, 'log-error');
+      appendLog('network error: ' + e.message);
       buildBtn.disabled = false;
+      document.getElementById('build-btn-label').textContent = 'Build firmware';
       return;
     }
 
     const es = new EventSource('/events?id=' + buildId);
-    es.onmessage = e => appendLog(e.data);
+    es.onmessage = e => { appendLog(e.data); inferStep(e.data); };
     es.addEventListener('done', e => {
       es.close();
-      if (e.data === 'success') {
-        statusEl.className = 'success';
-        statusEl.textContent = 'firmware ready!';
-        dlBtn.href = '/download?id=' + buildId;
-        dlArea.style.display = 'block';
+      const ok = e.data === 'success';
+      allStepsDone(ok);
+      step3.classList.add(ok ? 'done' : '');
+      if (ok) {
+        document.getElementById('download-btn').href = '/download?id=' + buildId;
+        document.getElementById('flash-card').classList.add('visible');
       } else {
-        statusEl.className = 'error';
-        statusEl.textContent = 'build failed — see log above';
+        document.getElementById('error-card').classList.add('visible');
       }
+      document.getElementById('build-btn-label').textContent = 'Build firmware';
       buildBtn.disabled = false;
     });
     es.onerror = () => {
-      appendLog('connection lost', 'log-error');
+      appendLog('connection lost');
       es.close();
+      document.getElementById('build-btn-label').textContent = 'Build firmware';
       buildBtn.disabled = false;
     };
   });
