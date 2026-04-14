@@ -1,3 +1,5 @@
+SAMPLE_RATE ?= 33000
+
 .PHONY: audio server kill-server restart-server debug clean prereqs quick changeto16 changeto4 changeto2
 
 build16: pico-sdk changeto16 quick
