@@ -2,6 +2,17 @@
 
 pikocore connects over USB and exposes itself as a class-compliant MIDI device — no drivers needed on Mac, Windows, or Linux.
 
+### MIDI mapping in Ableton (or any DAW)
+
+Because pikocore sends a Note On on every beat while playing, the continuously-firing notes will be captured by MIDI learn before the CC from the knob can get through.
+
+**Solution: mute pikocore before doing any MIDI mapping.**
+
+1. Hold buttons **0 + 3 + 4 + 7** (the four corners) simultaneously — pikocore mutes and stops sending notes. CCs from the knobs still fire normally.
+2. Do all your MIDI mapping.
+3. Press the same combo again to unmute.
+
+
 ## MIDI Out
 
 ### Notes
