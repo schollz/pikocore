@@ -888,7 +888,45 @@ body {
       <div class="card-header">
         <div class="step-badge" id="step1-badge">1</div>
         <h2>Audio samples</h2>
+        <button id="tips-btn" title="Naming tips" onclick="toggleTips()" style="margin-left:auto;background:none;border:1px solid var(--border);border-radius:20px;color:var(--text-muted);cursor:pointer;font-size:0.72rem;padding:0.15rem 0.55rem;transition:all 0.15s">ⓘ tips</button>
       </div>
+
+      <!-- Collapsible tips panel -->
+      <div id="tips-panel" style="display:none;border-bottom:1px solid var(--border);background:var(--surface2);padding:0.85rem 1rem;font-size:0.78rem;line-height:1.7;color:var(--text-muted)">
+        <div style="display:grid;gap:0.6rem">
+
+          <div>
+            <span style="color:var(--text);font-weight:600">Supported formats</span><br>
+            WAV · FLAC · MP3 · AIF · OGG
+          </div>
+
+          <div>
+            <span style="color:var(--text);font-weight:600">Embed BPM in the filename</span><br>
+            Include <code style="color:var(--accent)">_bpmXXX</code> anywhere in the name and pikocore will read it directly.
+            Audio is then time-stretched to match the build's target BPM.<br>
+            <span style="color:var(--text-muted);font-size:0.73rem">e.g. <code>amen_bpm170.wav</code> or <code>loop170bpm.flac</code></span>
+          </div>
+
+          <div>
+            <span style="color:var(--text);font-weight:600">Embed beat count in the filename</span><br>
+            Include <code style="color:var(--accent)">_beatsN</code> to tell pikocore how many beats are in the loop.
+            More beats = finer slicing granularity on the buttons.<br>
+            <span style="color:var(--text-muted);font-size:0.73rem">e.g. <code>amen_beats16_bpm170.wav</code></span>
+          </div>
+
+          <div>
+            <span style="color:var(--text);font-weight:600">No BPM in filename?</span><br>
+            pikocore will try to detect it automatically. Works best for loops between 100–200 BPM. For best results, always embed the BPM.
+          </div>
+
+          <div>
+            <span style="color:var(--text);font-weight:600">Multiple samples</span><br>
+            Upload up to 254 files. Each maps to a sample slot selectable via the knob. Files are loaded in alphabetical order — prefix with numbers to control ordering (e.g. <code>01_kick.wav</code>, <code>02_snare.wav</code>).
+          </div>
+
+        </div>
+      </div>
+
       <div class="card-body">
         <div id="dropzone">
           <div class="dz-icon">🎵</div>
@@ -1035,6 +1073,17 @@ body {
     document.getElementById('git-branch').textContent = d.branch;
     document.getElementById('git-commit').textContent = d.commit;
   }).catch(() => {});
+
+  // ── Tips toggle ──
+  function toggleTips() {
+    const panel = document.getElementById('tips-panel');
+    const btn   = document.getElementById('tips-btn');
+    const open  = panel.style.display === 'none';
+    panel.style.display = open ? 'block' : 'none';
+    btn.style.background  = open ? 'var(--accent-dim)' : 'none';
+    btn.style.borderColor = open ? 'var(--accent)'     : 'var(--border)';
+    btn.style.color       = open ? 'var(--accent)'     : 'var(--text-muted)';
+  }
 
   // ── File handling ──
   const dropzone  = document.getElementById('dropzone');
