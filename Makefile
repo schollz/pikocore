@@ -1,3 +1,5 @@
+.PHONY: server debug clean prereqs quick changeto16 changeto4 changeto2
+
 build16: pico-sdk changeto16 quick
 
 build4: pico-sdk changeto4 quick
