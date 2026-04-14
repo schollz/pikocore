@@ -49,7 +49,17 @@ If you want to turn off the LED, change `WS2812_ENABLED=1` to `WS2812_ENABLED=0`
 
 If you want to use MIDI instead of clock in (requires [itty bitty midi](https://ittybittymidi.com)) then set `MIDI_IN_ENABLED=1` in the `target_compile_definitions.cmake` file.
 
+For a full overview of MIDI input and output (notes, CC mapping, note remapping), see [docs/midi.md](docs/midi.md).
+
 If you have a V2 PCB layout where the Function A and Function B knobs are swapped, set `PCB_V2_LAYOUT=1` in the `target_compile_definitions.cmake` file.
+
+## sample studio
+
+You can run a local web app to manage your sample library and build custom firmware without touching the command line. See [docs/sample_studio.md](docs/sample_studio.md) for full details.
+
+```
+make server
+```
 
 ## dev
 

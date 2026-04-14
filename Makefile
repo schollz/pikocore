@@ -1,3 +1,7 @@
+SAMPLE_RATE ?= 33000
+
+.PHONY: audio server kill-server restart-server debug clean prereqs quick changeto16 changeto4 changeto2
+
 build16: pico-sdk changeto16 quick
 
 build4: pico-sdk changeto4 quick
@@ -22,10 +26,12 @@ doth/filter.h:
 	cd doth && python3 biquad.py $(SAMPLE_RATE) > filter.h
 	clang-format -i --style=google doth/filter.h
 
-quick: doth/easing.h doth/filter.h
+audio:
 	cd audio2h && rm -rf converted
 	cd audio2h && mkdir converted
 	cd audio2h && go run main.go --limit 1 --bpm 165 --sr ${SAMPLE_RATE} --folder-in demo
+
+quick: audio doth/easing.h doth/filter.h
 	mkdir -p build
 	cd build && cmake ..
 	cd build && make -j4
@@ -73,3 +79,12 @@ pico-sdk:
 
 debug:
 	sudo minicom -b 115200 -o -D /dev/ttyACM0
+
+server:
+	go run server/main.go
+
+kill-server:
+	-lsof -ti:8765 | xargs kill 2>/dev/null || true
+	@echo "server stopped"
+
+restart-server: kill-server server
