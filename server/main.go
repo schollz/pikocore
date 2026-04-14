@@ -446,7 +446,7 @@ func main() {
 
 	port := "8765"
 	url := "http://localhost:" + port
-	log.Printf("pikocore firmware builder → %s", url)
+	log.Printf("pikocore sample studio → %s", url)
 
 	go func() {
 		time.Sleep(400 * time.Millisecond)
@@ -465,7 +465,7 @@ const htmlPage = `<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>pikocore — build firmware</title>
+<title>pikocore — sample studio</title>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -858,7 +858,7 @@ body {
 <body>
 
 <header class="app-header">
-  <div class="logo">pikocore <span>/ firmware builder</span></div>
+  <div class="logo">pikocore <span>/ sample studio</span></div>
   <div class="git-badge">
     <span class="dot"></span>
     <span id="git-branch">loading…</span>
@@ -873,10 +873,10 @@ body {
   <div class="info-banner">
     <span class="icon">💡</span>
     <div>
-      <strong>Your audio files become the firmware.</strong>
-      pikocore has no SD card or file system — samples are compiled directly into flash memory.
-      Building generates a single <code>.uf2</code> binary that contains both the firmware logic
-      <em>and</em> your audio. Flashing it <strong>completely replaces</strong> everything currently on the device.
+      <strong>Load your own samples into pikocore.</strong>
+      Drop in your audio, configure the options, and download a custom <code>.uf2</code> ready to flash.
+      Because pikocore has no SD card, samples are baked directly into the firmware — so swapping your audio library means flashing a new build.
+      Each <code>.uf2</code> contains your samples <em>and</em> the firmware in one file, and <strong>completely replaces</strong> what's currently on the device.
     </div>
   </div>
 
