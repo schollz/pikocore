@@ -53,15 +53,13 @@ For a full overview of MIDI input and output (notes, CC mapping, note remapping)
 
 If you have a V2 PCB layout where the Function A and Function B knobs are swapped, set `PCB_V2_LAYOUT=1` in the `target_compile_definitions.cmake` file.
 
-## local firmware builder
+## sample studio
 
-You can run a local web UI (equivalent to [api.pikocore.com](https://api.pikocore.com)) to upload audio files and build custom firmware without touching the command line:
+You can run a local web app to manage your sample library and build custom firmware without touching the command line. See [docs/sample_studio.md](docs/sample_studio.md) for full details.
 
 ```
 make server
 ```
-
-This opens a browser at `http://localhost:8765`. Drag in your audio files, choose your options, hit **Build firmware**, and download the resulting `pikocore.uf2`.
 
 ## dev
 
