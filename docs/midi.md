@@ -8,9 +8,9 @@ Because pikocore sends a Note On on every beat while playing, the continuously-f
 
 **Solution: mute pikocore before doing any MIDI mapping.**
 
-1. Hold buttons **0 + 3 + 4 + 7** (the four corners) simultaneously — pikocore mutes and stops sending notes. CCs from the knobs still fire normally.
-2. Do all your MIDI mapping.
-3. Press the same combo again to unmute.
+1. Press and hold **all buttons at once** — pikocore mutes and stops sending notes. This works as a toggle: press all buttons again to unmute.
+2. Do all your MIDI mapping while muted — CCs from the knobs still fire normally.
+3. Press all buttons again to unmute and resume playback.
 
 
 ## MIDI Out
