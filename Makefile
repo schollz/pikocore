@@ -1,4 +1,4 @@
-.PHONY: server debug clean prereqs quick changeto16 changeto4 changeto2
+.PHONY: server kill-server restart-server debug clean prereqs quick changeto16 changeto4 changeto2
 
 build16: pico-sdk changeto16 quick
 
@@ -78,3 +78,9 @@ debug:
 
 server:
 	go run server/main.go
+
+kill-server:
+	-lsof -ti:8765 | xargs kill 2>/dev/null || true
+	@echo "server stopped"
+
+restart-server: kill-server server
