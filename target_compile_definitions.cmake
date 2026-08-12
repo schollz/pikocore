@@ -1,4 +1,8 @@
-target_compile_definitions(${PROJECT_NAME} PRIVATE
+if(NOT DEFINED PIKOCODE_TARGET)
+    set(PIKOCODE_TARGET ${PROJECT_NAME})
+endif()
+
+target_compile_definitions(${PIKOCODE_TARGET} PRIVATE
     WS2812_ENABLED=1
     MIDI_IN_ENABLED=0
     MIDI_RESET_EVERY_BEAT=16

@@ -215,6 +215,46 @@
   accent-color: var(--accent);
 }
 
+.app .clock-mode select {
+  height: 30px;
+}
+
+.app .clock-diagnostics {
+  margin-top: 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  padding: 10px 12px;
+  font-size: 13px;
+}
+
+.app .clock-diagnostics summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.app .clock-diagnostics dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px 16px;
+  margin: 12px 0 2px;
+}
+
+.app .clock-diagnostics dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.app .clock-diagnostics dt {
+  color: var(--muted);
+}
+
+.app .clock-diagnostics dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
 .app .clock-mode .disabled {
   opacity: 0.45;
 }

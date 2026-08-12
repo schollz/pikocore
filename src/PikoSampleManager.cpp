@@ -4,15 +4,14 @@
 #include <string.h>
 
 #include "PikoAudioBank.h"
+#include "PikoRuntime.h"
 #include "hardware/flash.h"
 #include "pico/bootrom.h"
 #include "pico/stdlib.h"
 #include "tusb.h"
 
-void do_stop_everything();
-void do_start_everything();
 bool piko_clock_input_ittybittymidi();
-bool piko_set_clock_input_ittybittymidi(bool enabled);
+uint8_t piko_pulse_ppqn();
 
 extern "C" void tud_cdc_line_coding_cb(uint8_t itf,
                                        cdc_line_coding_t const* line_coding) {
@@ -52,6 +51,7 @@ struct ScopedPlaybackMute {
 };
 
 void service_usb() {
+  piko_runtime_service_usb_midi();
   tud_task();
 }
 
@@ -146,7 +146,7 @@ void send_sync() {
 }
 
 [[noreturn]] void handle_bootloader_reset() {
-  do_stop_everything();
+  piko_request_stop_playback();
   write_str("OK\n");
   flush_serial();
   sleep_ms(100);
@@ -184,10 +184,10 @@ bool validate_header(const PikoBankHeader& header, uint32_t total_len) {
 }
 
 void handle_info() {
-  char info[256];
+  char info[512];
   uint32_t used = 0;
   int n = snprintf(info + used, sizeof(info) - used,
-                   "PIKO1 FW 2.2 F %lu R %lu S %lu A %lu C %lu U %lu SR %lu N %lu CLOCK_INPUT %s PROTO 1 BANK_VERSION %lu BANK_HEADER_SIZE %lu BANK_MAX_SAMPLES %lu\nEND\n",
+                   "PIKO1 FW 2.4 F %lu R %lu S %lu A %lu C %lu U %lu SR %lu N %lu CLOCK_INPUT %s PROTO 1 BANK_VERSION %lu BANK_HEADER_SIZE %lu BANK_MAX_SAMPLES %lu CLOCK_SYNC_VERSION 1 PULSE_PPQN %u\nEND\n",
                    static_cast<unsigned long>(piko_flash_total_bytes()),
                    static_cast<unsigned long>(PIKO_FIRMWARE_RESERVE),
                    static_cast<unsigned long>(piko_settings_flash_offset()),
@@ -199,7 +199,8 @@ void handle_info() {
                    piko_clock_input_ittybittymidi() ? "MIDI" : "CLOCK",
                    static_cast<unsigned long>(PIKO_BANK_VERSION),
                    static_cast<unsigned long>(PIKO_BANK_HEADER_SIZE),
-                   static_cast<unsigned long>(PIKO_BANK_MAX_SAMPLES));
+                   static_cast<unsigned long>(PIKO_BANK_MAX_SAMPLES),
+                   piko_pulse_ppqn());
   if (n < 0 || static_cast<uint32_t>(n) >= sizeof(info) - used) {
     return;
   }
@@ -343,12 +344,65 @@ void handle_clock_input_mode() {
     flush_serial();
     return;
   }
-  if (!piko_set_clock_input_ittybittymidi(value == 1)) {
+  if (!piko_request_clock_mode(value == 1)) {
     write_str("ERR\n");
     flush_serial();
     return;
   }
   write_str("OK\n");
+  flush_serial();
+}
+
+void handle_pulse_ppqn() {
+  const int value = read_byte_timeout(kWriteTimeoutMs);
+  if (value == PICO_ERROR_TIMEOUT ||
+      !piko::ClockSync::validPulsePpqn(static_cast<uint8_t>(value))) {
+    write_str("ERR\n");
+    flush_serial();
+    return;
+  }
+  if (!piko_request_pulse_ppqn(static_cast<uint8_t>(value))) {
+    write_str("ERR\n");
+    flush_serial();
+    return;
+  }
+  write_str("OK\n");
+  flush_serial();
+}
+
+void handle_clock_diagnostics() {
+  PikoClockSnapshot snapshot{};
+  if (!piko_read_clock_snapshot(&snapshot)) {
+    write_u32(0);
+    flush_serial();
+    return;
+  }
+  const piko::ClockDiagnostics& d = snapshot.clock;
+  const uint32_t last_edge_age =
+      d.accepted_events == 0 ? 0 : time_us_32() - d.last_edge_us;
+  char payload[512];
+  const int n = snprintf(
+      payload, sizeof(payload),
+      "CLOCK1 SOURCE %s STATE %s BPM_X100 %lu TARGET_BPM_X100 %lu JITTER_US %lu PHASE_ERROR_US %ld MAX_PHASE_ERROR_US %lu LAST_EDGE_AGE_US %lu PPQN %u ACCEPTED %lu REJECTED %lu MISSED %lu CLOCK_QUEUE_DROPS %lu MIDI_QUEUE_DROPS %lu\nEND\n",
+      piko::clockSourceName(d.source), piko::clockStateName(d.state),
+      static_cast<unsigned long>(d.measured_bpm_x100),
+      static_cast<unsigned long>(d.target_bpm_x100),
+      static_cast<unsigned long>(d.jitter_us),
+      static_cast<long>(d.phase_error_us),
+      static_cast<unsigned long>(d.max_phase_error_us),
+      static_cast<unsigned long>(last_edge_age), d.pulse_ppqn,
+      static_cast<unsigned long>(d.accepted_events),
+      static_cast<unsigned long>(d.rejected_events),
+      static_cast<unsigned long>(d.missed_events),
+      static_cast<unsigned long>(snapshot.clock_queue_drops),
+      static_cast<unsigned long>(snapshot.midi_queue_drops));
+  if (n <= 0 || static_cast<size_t>(n) >= sizeof(payload)) {
+    write_u32(0);
+    flush_serial();
+    return;
+  }
+  write_u32(static_cast<uint32_t>(n));
+  write_bytes(payload, static_cast<uint32_t>(n));
   flush_serial();
 }
 
@@ -360,6 +414,7 @@ void piko_sample_manager_set_ready() {
 }
 
 void piko_sample_manager_core() {
+  tusb_init();
   while (true) {
     service_usb();
     if (!serial_connected()) {
@@ -395,17 +450,22 @@ void piko_sample_manager_core() {
         flush_serial();
         break;
       case 'S':
-        do_stop_everything();
-        write_str("OK\n");
+        write_str(piko_request_stop_playback() ? "OK\n" : "ERR\n");
         flush_serial();
         break;
       case 'B':
-        do_stop_everything();
+        piko_request_stop_playback();
         handle_info();
-        do_start_everything();
+        piko_request_start_playback();
         break;
       case 'C':
         handle_clock_input_mode();
+        break;
+      case 'P':
+        handle_pulse_ppqn();
+        break;
+      case 'D':
+        handle_clock_diagnostics();
         break;
       case 'U':
         handle_bootloader_reset();

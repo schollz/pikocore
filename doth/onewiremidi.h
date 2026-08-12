@@ -82,14 +82,15 @@ Onewiremidi *Onewiremidi_new(PIO pio, unsigned char sm, const uint pin,
 
   uint offset = pio_add_program(pio, &midi_rx_program);
   pio_sm_config c = midi_rx_program_get_default_config(offset);
+  pio_gpio_init(pio, pin);
   sm_config_set_in_pins(&c, pin);
-  pio_sm_set_consecutive_pindirs(pio, sm, pin, 1, true);
-  sm_config_set_set_pins(&c, pin, 1);
+  pio_sm_set_consecutive_pindirs(pio, sm, pin, 1, false);
   sm_config_set_in_shift(&c, 0, 0, 0);  // Corrected the shift setup
   pio_sm_init(pio, sm, offset, &c);
   pio_sm_set_clkdiv(pio, sm,
                     (float)clock_get_hz(clk_sys) / 1000000.0f);  // 1 us/cycle
-  pio_sm_set_enabled(pio, sm, true);
+  pio_sm_clear_fifos(pio, sm);
+  pio_sm_set_enabled(pio, sm, false);
   return self;
 }
 
@@ -105,18 +106,17 @@ typedef struct midi_message {
   uint8_t data[2];
 } midi_message;
 
-void Onewiremidi_receive(Onewiremidi *self) {
-  if (pio_sm_is_rx_fifo_empty(self->pio, self->sm)) {
-    return;
-  }
-  uint32_t t = time_us_32();
+uint8_t Onewiremidi_decode(uint32_t raw) {
+  uint8_t b = Onewiremidi_reverse_uint8_t(raw);
+  return ~b;
+}
+
+void Onewiremidi_receive_byte(Onewiremidi *self, uint8_t b, uint32_t t) {
   if (t - self->last_time > 1000) {
     self->status = 0;
     self->previous = 0;
   }
   self->last_time = t;
-  uint8_t b = Onewiremidi_reverse_uint8_t(pio_sm_get(self->pio, self->sm));
-  b = ~b;
 
   enum { DATA0_PRESENT = 0x80 };
   midi_message msg = {0};
@@ -163,4 +163,14 @@ void Onewiremidi_receive(Onewiremidi *self) {
   }
 
   return;
+}
+
+void Onewiremidi_set_enabled(Onewiremidi *self, bool enabled) {
+  pio_sm_set_enabled(self->pio, self->sm, false);
+  pio_sm_clear_fifos(self->pio, self->sm);
+  pio_sm_restart(self->pio, self->sm);
+  self->status = 0;
+  self->previous = 0;
+  self->last_time = 0;
+  if (enabled) pio_sm_set_enabled(self->pio, self->sm, true);
 }

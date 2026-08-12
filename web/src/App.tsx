@@ -28,7 +28,14 @@ import {
   parseBankBlob,
   usedAudioBytes,
 } from './bank';
-import { DeviceInfo, PikocoreSerial, isCompatibleFirmware } from './serial';
+import {
+  ClockDiagnostics,
+  DeviceInfo,
+  PikocoreSerial,
+  hasClockSync,
+  isCompatibleFirmware,
+  shouldPollClockDiagnostics,
+} from './serial';
 import ittybittymidiConnection from './assets/ittybittymidi_connection.jpg';
 import pikocoreInstructions from './assets/pikocore_instructions.png';
 
@@ -90,11 +97,14 @@ export function App() {
   const [debugLog, setDebugLog] = useState<string[]>([]);
   const [debugOpen, setDebugOpen] = useState(false);
   const [ittybittymidiInfoOpen, setIttybittymidiInfoOpen] = useState(false);
+  const [clockDiagnostics, setClockDiagnostics] = useState<ClockDiagnostics | null>(null);
   const [theme] = useState<Theme>(() => loadTheme());
   const debugOpenRef = useRef(false);
   const debugEntriesRef = useRef<string[]>([]);
   const debugFlushTimerRef = useRef<number | null>(null);
   const debugInteractionRef = useRef(false);
+  const busyRef = useRef(false);
+  const diagnosticsRequestRef = useRef(false);
   const audioRef = useRef<{
     context: AudioContext;
     source: AudioBufferSourceNode;
@@ -105,6 +115,37 @@ export function App() {
   useEffect(() => {
     window.localStorage.setItem('pikocore-theme', theme);
   }, [theme]);
+
+  useEffect(() => {
+    busyRef.current = busy;
+  }, [busy]);
+
+  useEffect(() => {
+    if (!connected || !hasClockSync(device)) {
+      setClockDiagnostics(null);
+      return;
+    }
+    let cancelled = false;
+    const poll = async () => {
+      if (!shouldPollClockDiagnostics(connected, busyRef.current, device, diagnosticsRequestRef.current)) return;
+      diagnosticsRequestRef.current = true;
+      try {
+        const next = await serial.clockDiagnostics(true);
+        if (!cancelled) setClockDiagnostics(next);
+      } catch (_) {
+        // A foreground command or disconnect owns status reporting. Polling is
+        // intentionally silent and resumes after serial becomes idle.
+      } finally {
+        diagnosticsRequestRef.current = false;
+      }
+    };
+    void poll();
+    const timer = window.setInterval(() => void poll(), 500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [connected, device]);
 
   useEffect(() => {
     debugOpenRef.current = debugOpen;
@@ -167,20 +208,39 @@ export function App() {
       : null;
   const transferText = uploadTransferText ?? downloadTransferText ?? firmwareDownloadTransferText;
 
+  async function beginBusyOperation() {
+    busyRef.current = true;
+    setBusy(true);
+    while (diagnosticsRequestRef.current) {
+      await new Promise((resolve) => window.setTimeout(resolve, 10));
+    }
+  }
+
+  function endBusyOperation() {
+    busyRef.current = false;
+    setBusy(false);
+  }
+
   async function connect() {
     if (connected) {
-      stopPreview();
-      await serial.disconnect();
-      setConnected(false);
-      setDevice(null);
-      setIncompatibleDevice(null);
-      setBankDirty(false);
-      setStatus({ text: 'Disconnected', kind: 'idle' });
+      await beginBusyOperation();
+      try {
+        stopPreview();
+        await serial.disconnect();
+        setConnected(false);
+        setDevice(null);
+        setClockDiagnostics(null);
+        setIncompatibleDevice(null);
+        setBankDirty(false);
+        setStatus({ text: 'Disconnected', kind: 'idle' });
+      } finally {
+        endBusyOperation();
+      }
       return;
     }
 
     try {
-      setBusy(true);
+      await beginBusyOperation();
       clearDebugLog();
       setIncompatibleDevice(null);
       serial.setLogger(appendDebugLog);
@@ -224,14 +284,14 @@ export function App() {
       setConnected(false);
       setBankDirty(false);
     } finally {
-      setBusy(false);
+      endBusyOperation();
     }
   }
 
   async function enterBootloaderMode() {
     const wasConnected = connected;
     try {
-      setBusy(true);
+      await beginBusyOperation();
       stopPreview();
       serial.setLogger(appendDebugLog);
       setStatus({ text: 'Entering BOOTSEL mode', kind: 'idle' });
@@ -267,13 +327,13 @@ export function App() {
         kind: 'bad',
       });
     } finally {
-      setBusy(false);
+      endBusyOperation();
     }
   }
 
   async function downloadFirmware() {
     try {
-      setBusy(true);
+      await beginBusyOperation();
       setProgress(0);
       setUploadDetail(null);
       setDownloadDetail(null);
@@ -330,7 +390,7 @@ export function App() {
       setProgress(0);
       setFirmwareDownloadDetail(null);
       setDownloadDetail(null);
-      setBusy(false);
+      endBusyOperation();
     }
   }
 
@@ -442,7 +502,7 @@ export function App() {
     }
     const filesToProcess = files.slice(0, availableSlots);
     const skipped = files.length - filesToProcess.length;
-    setBusy(true);
+    await beginBusyOperation();
     try {
       const next: BankSample[] = [];
       for (const file of filesToProcess) {
@@ -461,7 +521,7 @@ export function App() {
     } catch (error) {
       setStatus({ text: errorMessage(error), kind: 'bad' });
     } finally {
-      setBusy(false);
+      endBusyOperation();
     }
   }
 
@@ -472,7 +532,7 @@ export function App() {
     }
     try {
       if (!device) throw new Error('Connect to a pikocore before uploading');
-      setBusy(true);
+      await beginBusyOperation();
       stopPreview();
       setStatus({ text: 'Uploading', kind: 'idle' });
       const blob = buildBankBlob(samples, device.capacityBytes);
@@ -505,14 +565,14 @@ export function App() {
       setProgress(0);
       setUploadDetail(null);
       setDownloadDetail(null);
-      setBusy(false);
+      endBusyOperation();
     }
   }
 
   async function readDevice() {
     if (!connected || incompatibleDevice) return;
     try {
-      setBusy(true);
+      await beginBusyOperation();
       stopPreview();
       setStatus({ text: 'Downloading', kind: 'idle' });
       const bank = await readBankWithProgress();
@@ -535,14 +595,14 @@ export function App() {
     } finally {
       setProgress(0);
       setDownloadDetail(null);
-      setBusy(false);
+      endBusyOperation();
     }
   }
 
   async function eraseDevice() {
     if (!connected || incompatibleDevice) return;
     try {
-      setBusy(true);
+      await beginBusyOperation();
       stopPreview();
       setStatus({ text: 'Erasing', kind: 'idle' });
       await serial.erase();
@@ -554,14 +614,14 @@ export function App() {
     } catch (error) {
       setStatus({ text: errorMessage(error), kind: 'bad' });
     } finally {
-      setBusy(false);
+      endBusyOperation();
     }
   }
 
   async function setIttybittymidiMode(enabled: boolean) {
     if (!connected || !device) return;
     try {
-      setBusy(true);
+      await beginBusyOperation();
       setStatus({ text: 'Saving clock input mode', kind: 'idle' });
       await serial.setClockInputMode(enabled);
       const info = await serial.info();
@@ -573,7 +633,23 @@ export function App() {
     } catch (error) {
       setStatus({ text: errorMessage(error), kind: 'bad' });
     } finally {
-      setBusy(false);
+      endBusyOperation();
+    }
+  }
+
+  async function setPulsePpqn(ppqn: 1 | 2 | 4) {
+    if (!connected || !device || !hasClockSync(device)) return;
+    try {
+      await beginBusyOperation();
+      setStatus({ text: 'Saving pulse division', kind: 'idle' });
+      await serial.setPulsePpqn(ppqn);
+      const info = await serial.info();
+      setDevice(info);
+      setStatus({ text: `Pulse clock set to ${pulseDivisionLabel(ppqn)}`, kind: 'good' });
+    } catch (error) {
+      setStatus({ text: errorMessage(error), kind: 'bad' });
+    } finally {
+      endBusyOperation();
     }
   }
 
@@ -870,9 +946,51 @@ export function App() {
             >
               more info
             </button>
+            {hasClockSync(device) ? (
+              <label className={!connected || incompatibleDevice != null || busy ? 'disabled' : ''}>
+                Pulse division
+                <select
+                  value={device?.pulsePpqn ?? 2}
+                  disabled={!connected || incompatibleDevice != null || busy}
+                  onChange={(event) => void setPulsePpqn(Number(event.currentTarget.value) as 1 | 2 | 4)}
+                  title="Choose the pulse clock division"
+                  aria-label="Pulse clock division"
+                >
+                  <option value={1}>Quarter note (1 PPQN)</option>
+                  <option value={2}>Eighth note (2 PPQN)</option>
+                  <option value={4}>Sixteenth note (4 PPQN)</option>
+                </select>
+              </label>
+            ) : null}
           </div>
         </div>
       </header>
+
+      {hasClockSync(device) ? (
+        <details className="clock-diagnostics">
+          <summary>
+            Clock diagnostics
+            {clockDiagnostics ? ` — ${clockDiagnostics.state.toLowerCase()} at ${(clockDiagnostics.bpmX100 / 100).toFixed(2)} BPM` : ''}
+          </summary>
+          {clockDiagnostics ? (
+            <dl>
+              <div><dt>Source</dt><dd>{clockDiagnostics.source}</dd></div>
+              <div><dt>State</dt><dd>{clockDiagnostics.state}</dd></div>
+              <div><dt>Measured</dt><dd>{(clockDiagnostics.bpmX100 / 100).toFixed(2)} BPM</dd></div>
+              <div><dt>Target</dt><dd>{(clockDiagnostics.targetBpmX100 / 100).toFixed(2)} BPM</dd></div>
+              <div><dt>Jitter</dt><dd>{clockDiagnostics.jitterUs} µs</dd></div>
+              <div><dt>Phase error</dt><dd>{clockDiagnostics.phaseErrorUs} µs</dd></div>
+              <div><dt>Maximum phase error</dt><dd>{clockDiagnostics.maxPhaseErrorUs} µs</dd></div>
+              <div><dt>Last edge age</dt><dd>{clockDiagnostics.lastEdgeAgeUs} µs</dd></div>
+              <div><dt>PPQN</dt><dd>{clockDiagnostics.ppqn}</dd></div>
+              <div><dt>Events</dt><dd>{clockDiagnostics.accepted} accepted / {clockDiagnostics.rejected} rejected / {clockDiagnostics.missed} missed</dd></div>
+              <div><dt>Queue drops</dt><dd>{clockDiagnostics.clockQueueDrops} clock / {clockDiagnostics.midiQueueDrops} MIDI</dd></div>
+            </dl>
+          ) : (
+            <p>Waiting for clock data…</p>
+          )}
+        </details>
+      ) : null}
 
       {incompatibleDevice ? (
         <section className="firmware-warning" role="alert">
@@ -1207,6 +1325,12 @@ function formatBytes(bytes: number): string {
 
 function formatDuration(frames: number): string {
   return `${(frames / BANK_SAMPLE_RATE).toFixed(2)} s`;
+}
+
+function pulseDivisionLabel(ppqn: 1 | 2 | 4): string {
+  if (ppqn === 1) return 'quarter notes';
+  if (ppqn === 4) return 'sixteenth notes';
+  return 'eighth notes';
 }
 
 function formatEta(ms: number): string {

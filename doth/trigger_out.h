@@ -1,14 +1,15 @@
 class TriggerOut {
   uint8_t gpio;
-  uint16_t trig_out_count;
-  uint16_t trig_out_max;
+  uint32_t pulse_width_us;
+  uint32_t deadline_us;
   bool high;
 
  public:
   void Init(uint8_t gpio_, uint16_t milliseconds, uint16_t loop_hz) {
+    (void)loop_hz;
     gpio = gpio_;
-    trig_out_count = 0;
-    trig_out_max = loop_hz * milliseconds;
+    pulse_width_us = static_cast<uint32_t>(milliseconds) * 1000u;
+    deadline_us = 0;
     high = false;
 
     gpio_init(gpio);
@@ -17,20 +18,14 @@ class TriggerOut {
   }
 
   void Update() {
-    if (trig_out_count > 0) {
-      trig_out_count--;
-      if (trig_out_count == 0) {
-        gpio_put(gpio, 0);
-        high = false;
-      } else if (!high) {
-        gpio_put(gpio, 1);
-        high = true;
-      }
+    if (high && static_cast<int32_t>(time_us_32() - deadline_us) >= 0) {
+      gpio_put(gpio, 0);
+      high = false;
     }
   }
 
   void Trigger() {
-    trig_out_count = trig_out_max;
+    deadline_us = time_us_32() + pulse_width_us;
     gpio_put(gpio, 1);
     high = true;
   }

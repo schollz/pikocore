@@ -11,11 +11,49 @@ export interface DeviceInfo {
   sampleRate: number;
   sampleCount: number;
   ittybittymidiMode: boolean;
+  pulsePpqn?: 1 | 2 | 4;
+  clockSyncVersion?: number;
   protocolVersion?: number;
   bankVersion?: number;
   bankHeaderSize?: number;
   bankMaxSamples?: number;
   raw: string;
+}
+
+export interface ClockDiagnostics {
+  source: 'INTERNAL' | 'PULSE' | 'MIDI';
+  state: 'UNLOCKED' | 'ACQUIRING' | 'LOCKED' | 'HOLDOVER';
+  bpmX100: number;
+  targetBpmX100: number;
+  jitterUs: number;
+  phaseErrorUs: number;
+  maxPhaseErrorUs: number;
+  lastEdgeAgeUs: number;
+  ppqn: number;
+  accepted: number;
+  rejected: number;
+  missed: number;
+  clockQueueDrops: number;
+  midiQueueDrops: number;
+  raw: string;
+}
+
+export function hasClockSync(info: DeviceInfo | null): boolean {
+  return info?.clockSyncVersion === 1;
+}
+
+export function shouldPollClockDiagnostics(
+  connected: boolean,
+  busy: boolean,
+  info: DeviceInfo | null,
+  requestInFlight: boolean,
+): boolean {
+  return connected && !busy && hasClockSync(info) && !requestInFlight;
+}
+
+export function pulsePpqnCommand(ppqn: number): Uint8Array {
+  if (ppqn !== 1 && ppqn !== 2 && ppqn !== 4) throw new Error(`Invalid pulse PPQN ${ppqn}`);
+  return new Uint8Array([0x50, ppqn]);
 }
 
 export function isCompatibleFirmware(info: DeviceInfo): boolean {
@@ -206,6 +244,23 @@ export class PikocoreSerial {
     await this.write(new Uint8Array([ittybittymidiMode ? 1 : 0]));
     const line = await this.waitForLine(COMMAND_TIMEOUT_MS);
     if (line !== 'OK') throw new Error(`Clock input setting rejected: ${line}`);
+  }
+
+  async setPulsePpqn(ppqn: 1 | 2 | 4): Promise<void> {
+    await this.sync();
+    await this.write(pulsePpqnCommand(ppqn));
+    const line = await this.waitForLine(COMMAND_TIMEOUT_MS);
+    if (line !== 'OK') throw new Error(`Pulse PPQN setting rejected: ${line}`);
+  }
+
+  async clockDiagnostics(skipSync = false): Promise<ClockDiagnostics> {
+    if (!skipSync) await this.sync();
+    await this.writeString('D');
+    const lenBytes = await this.waitForBytes(4, METADATA_TIMEOUT_MS, METADATA_GRACE_MS);
+    const len = new DataView(lenBytes.buffer, lenBytes.byteOffset, 4).getUint32(0, true);
+    if (len === 0 || len > 4096) throw new Error(`Invalid diagnostics length ${len}`);
+    const payload = await this.waitForBytes(len, METADATA_TIMEOUT_MS, METADATA_GRACE_MS);
+    return parseClockDiagnostics(new TextDecoder().decode(payload));
   }
 
   async readBank(progress?: (ratio: number, transferredBytes: number, totalBytes: number) => void): Promise<Uint8Array | null> {
@@ -440,10 +495,57 @@ export function parseInfo(text: string): DeviceInfo {
     sampleRate: Number(token(['RATE', 'SR'], '24000')),
     sampleCount: Number(token(['COUNT', 'N'], '0')),
     ittybittymidiMode: token(['CLOCK_INPUT', 'CI'], 'CLOCK') === 'MIDI',
+    pulsePpqn: parsePulsePpqn(numberToken('PULSE_PPQN')),
+    clockSyncVersion: numberToken('CLOCK_SYNC_VERSION'),
     protocolVersion: numberToken('PROTO'),
     bankVersion: numberToken('BANK_VERSION'),
     bankHeaderSize: numberToken('BANK_HEADER_SIZE'),
     bankMaxSamples: numberToken('BANK_MAX_SAMPLES'),
+    raw: text,
+  };
+}
+
+function parsePulsePpqn(value: number | undefined): 1 | 2 | 4 | undefined {
+  return value === 1 || value === 2 || value === 4 ? value : undefined;
+}
+
+export function parseClockDiagnostics(text: string): ClockDiagnostics {
+  const first = text.trim().split('\n')[0] ?? '';
+  const parts = first.split(/\s+/);
+  if (parts[0] !== 'CLOCK1') throw new Error(`Bad clock diagnostics: ${first}`);
+  const token = (name: string) => {
+    const index = parts.indexOf(name);
+    if (index < 0 || !parts[index + 1]) throw new Error(`Missing ${name} in clock diagnostics`);
+    return parts[index + 1];
+  };
+  const numberToken = (name: string) => {
+    const value = Number(token(name));
+    if (!Number.isFinite(value)) throw new Error(`Invalid ${name} in clock diagnostics`);
+    return value;
+  };
+  const source = token('SOURCE');
+  const state = token('STATE');
+  if (source !== 'INTERNAL' && source !== 'PULSE' && source !== 'MIDI') {
+    throw new Error(`Invalid clock source ${source}`);
+  }
+  if (state !== 'UNLOCKED' && state !== 'ACQUIRING' && state !== 'LOCKED' && state !== 'HOLDOVER') {
+    throw new Error(`Invalid clock state ${state}`);
+  }
+  return {
+    source,
+    state,
+    bpmX100: numberToken('BPM_X100'),
+    targetBpmX100: numberToken('TARGET_BPM_X100'),
+    jitterUs: numberToken('JITTER_US'),
+    phaseErrorUs: numberToken('PHASE_ERROR_US'),
+    maxPhaseErrorUs: numberToken('MAX_PHASE_ERROR_US'),
+    lastEdgeAgeUs: numberToken('LAST_EDGE_AGE_US'),
+    ppqn: numberToken('PPQN'),
+    accepted: numberToken('ACCEPTED'),
+    rejected: numberToken('REJECTED'),
+    missed: numberToken('MISSED'),
+    clockQueueDrops: numberToken('CLOCK_QUEUE_DROPS'),
+    midiQueueDrops: numberToken('MIDI_QUEUE_DROPS'),
     raw: text,
   };
 }
